@@ -10,6 +10,12 @@ pub enum TokenKind {
     // Operators
     Assign,
     Plus,
+    Minus,
+    Bang,
+    Asterisk,
+    Slash,
+    Lt,
+    Gt,
     // Delimiters
     Comma,
     Semicolon,

@@ -39,11 +39,17 @@ impl Lexer {
 
         let (kind, literal) = match self.ch {
             '=' => (Assign, self.ch.to_string()),
+            '+' => (Plus, self.ch.to_string()),
+            '-' => (Minus, self.ch.to_string()),
+            '!' => (Bang, self.ch.to_string()),
+            '/' => (Slash, self.ch.to_string()),
+            '*' => (Asterisk, self.ch.to_string()),
+            '<' => (Lt, self.ch.to_string()),
+            '>' => (Gt, self.ch.to_string()),
             ';' => (Semicolon, self.ch.to_string()),
+            ',' => (Comma, self.ch.to_string()),
             '(' => (LParen, self.ch.to_string()),
             ')' => (RParen, self.ch.to_string()),
-            ',' => (Comma, self.ch.to_string()),
-            '+' => (Plus, self.ch.to_string()),
             '{' => (LBrace, self.ch.to_string()),
             '}' => (RBrace, self.ch.to_string()),
             '\0' => (Eof, "".to_string()),
@@ -154,6 +160,8 @@ let add = fn(x, y) {
 };
 
 let result = add(five, ten);
+!-/*5;
+5 < 10 > 5;
         "
         .to_string();
 
@@ -193,6 +201,18 @@ let result = add(five, ten);
             (TokenKind::Comma, ","),
             (TokenKind::Identifier, "ten"),
             (TokenKind::RParen, ")"),
+            (TokenKind::Semicolon, ";"),
+            (TokenKind::Bang, "!"),
+            (TokenKind::Minus, "-"),
+            (TokenKind::Slash, "/"),
+            (TokenKind::Asterisk, "*"),
+            (TokenKind::Int, "5"),
+            (TokenKind::Semicolon, ";"),
+            (TokenKind::Int, "5"),
+            (TokenKind::Lt, "<"),
+            (TokenKind::Int, "10"),
+            (TokenKind::Gt, ">"),
+            (TokenKind::Int, "5"),
             (TokenKind::Semicolon, ";"),
             (TokenKind::Eof, ""),
         ];
