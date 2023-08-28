@@ -1,8 +1,8 @@
 use std::io;
 
 mod ast;
-mod parser;
 mod lexer;
+mod parser;
 mod repl;
 mod token;
 

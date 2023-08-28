@@ -11,6 +11,7 @@ pub struct Parser {
 
     pub current: Token,
     pub peek: Token,
+    pub errors: Vec<String>,
 }
 
 impl Parser {
@@ -21,6 +22,7 @@ impl Parser {
             lexer,
             current,
             peek,
+            errors: Vec::new(),
         }
     }
 
@@ -93,14 +95,23 @@ impl Parser {
         std::mem::discriminant(&self.peek.kind) == std::mem::discriminant(&kind)
     }
 
-    /// Check the peek token and advance if matches
+    /// Assert the kind of the peek token and advance
     fn expect_peek(&mut self, kind: TokenKind) -> bool {
         if self.peek_is(kind) {
             self.next_token();
             true
         } else {
+            self.peek_error(kind);
             false
         }
+    }
+
+    /// Add an error to the `errors` list due to peek
+    fn peek_error(&mut self, kind: TokenKind) {
+        self.errors.push(format!(
+            "expected next token to be {:?}, got {:?} instead",
+            kind, self.peek.kind
+        ));
     }
 }
 
@@ -109,6 +120,18 @@ mod tests {
     use crate::ast::{Node, Statement};
 
     use super::*;
+
+    fn check_parser_errors(parser: &mut Parser) {
+        if parser.errors.is_empty() {
+            return;
+        }
+
+        for error in &parser.errors {
+            println!("parser error: \"{}\"", error);
+        }
+
+        panic!("found parser errors");
+    }
 
     #[test]
     fn test_let_statements() {
@@ -121,6 +144,7 @@ let foobar = 838383;"
         let mut parser = Parser::new(lexer);
 
         let program = parser.parse();
+        check_parser_errors(&mut parser);
         assert_eq!(program.statements.len(), 3);
 
         let expected_idents = ["x", "y", "foobar"];

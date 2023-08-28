@@ -31,7 +31,7 @@ impl Lexer {
         // go code uses
         let mut has_consumed = false;
 
-        // TODO(alvaro): Make a `make_two_char_token` that encapsulates the 
+        // TODO(alvaro): Make a `make_two_char_token` that encapsulates the
         // shared logic between `==` and `!=` branches
         let (kind, literal) = match self.ch {
             '=' => {
@@ -53,7 +53,7 @@ impl Lexer {
                 } else {
                     (Bang, self.ch.to_string())
                 }
-            },
+            }
             '/' => (Slash, self.ch.to_string()),
             '*' => (Asterisk, self.ch.to_string()),
             '<' => (Lt, self.ch.to_string()),
