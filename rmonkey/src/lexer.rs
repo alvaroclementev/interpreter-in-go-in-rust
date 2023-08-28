@@ -22,12 +22,6 @@ impl Lexer {
         lexer
     }
 
-    fn read_char(&mut self) {
-        self.ch = self.input.chars().nth(self.read_position).unwrap_or('\0');
-        self.position = self.read_position;
-        self.read_position += 1;
-    }
-
     pub fn next_token(&mut self) -> Token {
         use TokenKind::*;
 
@@ -37,11 +31,29 @@ impl Lexer {
         // go code uses
         let mut has_consumed = false;
 
+        // TODO(alvaro): Make a `make_two_char_token` that encapsulates the 
+        // shared logic between `==` and `!=` branches
         let (kind, literal) = match self.ch {
-            '=' => (Assign, self.ch.to_string()),
+            '=' => {
+                if self.peak_char() == '=' {
+                    let ch = self.ch;
+                    self.read_char();
+                    (Eq, format!("{}{}", ch, self.ch))
+                } else {
+                    (Assign, self.ch.to_string())
+                }
+            }
             '+' => (Plus, self.ch.to_string()),
             '-' => (Minus, self.ch.to_string()),
-            '!' => (Bang, self.ch.to_string()),
+            '!' => {
+                if self.peak_char() == '=' {
+                    let ch = self.ch;
+                    self.read_char();
+                    (NotEq, format!("{}{}", ch, self.ch))
+                } else {
+                    (Bang, self.ch.to_string())
+                }
+            },
             '/' => (Slash, self.ch.to_string()),
             '*' => (Asterisk, self.ch.to_string()),
             '<' => (Lt, self.ch.to_string()),
@@ -74,6 +86,16 @@ impl Lexer {
         }
 
         Token::new(kind, literal)
+    }
+
+    fn read_char(&mut self) {
+        self.ch = self.input.chars().nth(self.read_position).unwrap_or('\0');
+        self.position = self.read_position;
+        self.read_position += 1;
+    }
+
+    fn peak_char(&self) -> char {
+        self.input.chars().nth(self.read_position).unwrap_or('\0')
     }
 
     // FIXME(alvaro): We can make a `read_while` helper that takes a predicate
@@ -117,6 +139,11 @@ fn lookup_identifier(ident: &str) -> TokenKind {
     match ident {
         "fn" => TokenKind::Function,
         "let" => TokenKind::Let,
+        "true" => TokenKind::True,
+        "false" => TokenKind::False,
+        "if" => TokenKind::If,
+        "else" => TokenKind::Else,
+        "return" => TokenKind::Return,
         _ => TokenKind::Identifier,
     }
 }
@@ -162,6 +189,15 @@ let add = fn(x, y) {
 let result = add(five, ten);
 !-/*5;
 5 < 10 > 5;
+
+if (5 < 10) {
+    return true;
+} else {
+    return false;
+}
+
+10 == 10;
+10 != 9;
         "
         .to_string();
 
@@ -213,6 +249,31 @@ let result = add(five, ten);
             (TokenKind::Int, "10"),
             (TokenKind::Gt, ">"),
             (TokenKind::Int, "5"),
+            (TokenKind::Semicolon, ";"),
+            (TokenKind::If, "if"),
+            (TokenKind::LParen, "("),
+            (TokenKind::Int, "5"),
+            (TokenKind::Lt, "<"),
+            (TokenKind::Int, "10"),
+            (TokenKind::RParen, ")"),
+            (TokenKind::LBrace, "{"),
+            (TokenKind::Return, "return"),
+            (TokenKind::True, "true"),
+            (TokenKind::Semicolon, ";"),
+            (TokenKind::RBrace, "}"),
+            (TokenKind::Else, "else"),
+            (TokenKind::LBrace, "{"),
+            (TokenKind::Return, "return"),
+            (TokenKind::False, "false"),
+            (TokenKind::Semicolon, ";"),
+            (TokenKind::RBrace, "}"),
+            (TokenKind::Int, "10"),
+            (TokenKind::Eq, "=="),
+            (TokenKind::Int, "10"),
+            (TokenKind::Semicolon, ";"),
+            (TokenKind::Int, "10"),
+            (TokenKind::NotEq, "!="),
+            (TokenKind::Int, "9"),
             (TokenKind::Semicolon, ";"),
             (TokenKind::Eof, ""),
         ];

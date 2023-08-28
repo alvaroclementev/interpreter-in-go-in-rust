@@ -16,6 +16,8 @@ pub enum TokenKind {
     Slash,
     Lt,
     Gt,
+    Eq,
+    NotEq,
     // Delimiters
     Comma,
     Semicolon,
@@ -26,6 +28,11 @@ pub enum TokenKind {
     // Keywords
     Function,
     Let,
+    True,
+    False,
+    If,
+    Else,
+    Return,
 }
 
 #[derive(Debug, Clone)]
