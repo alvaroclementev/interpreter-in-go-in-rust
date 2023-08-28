@@ -3,7 +3,7 @@
 use crate::token::{Token, TokenKind};
 
 #[derive(Debug, Clone)]
-struct Lexer {
+pub struct Lexer {
     input: String,
     position: usize,
     read_position: usize,
@@ -11,7 +11,7 @@ struct Lexer {
 }
 
 impl Lexer {
-    fn new(input: String) -> Self {
+    pub fn new(input: String) -> Self {
         let mut lexer = Self {
             input,
             position: 0,
