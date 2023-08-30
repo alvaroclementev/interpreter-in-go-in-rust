@@ -6,6 +6,17 @@ use crate::{
     token::{Token, TokenKind},
 };
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Precedence {
+    Lowest,
+    Equals,
+    LessGreater,
+    Sum,
+    Product,
+    Prefix,
+    Call,
+}
+
 pub struct Parser {
     lexer: Lexer,
 
@@ -52,7 +63,7 @@ impl Parser {
         match self.current.kind {
             TokenKind::Let => self.parse_let_statement(),
             TokenKind::Return => self.parse_return_statement(),
-            _ => None,
+            _ => self.parse_expression_statement(),
         }
     }
 
@@ -108,6 +119,35 @@ impl Parser {
         )))
     }
 
+    fn parse_expression_statement(&mut self) -> Option<ast::Statement> {
+        println!("Parsing Expression Statement: {:?}", &self.current);
+
+        let expr = self.parse_expression(Precedence::Lowest)?;
+        let statement = ast::Statement::Expression(expr);
+
+        if self.peek_is(TokenKind::Semicolon) {
+            self.next_token();
+        }
+
+        Some(statement)
+    }
+
+    fn parse_expression(&mut self, _precedence: Precedence) -> Option<ast::Expression> {
+        self.parse_expression_prefix(self.current.kind)
+    }
+
+    fn parse_expression_prefix(&mut self, kind: TokenKind) -> Option<ast::Expression> {
+        match kind {
+            TokenKind::Identifier => Some(self.parse_identifier()),
+            _ => None,
+        }
+    }
+
+    fn parse_identifier(&self) -> ast::Expression {
+        let ident = ast::Identifier::new(self.current.clone(), self.current.literal.clone());
+        ast::Expression::Identifier(ident)
+    }
+
     fn current_is(&self, kind: TokenKind) -> bool {
         std::mem::discriminant(&self.current.kind) == std::mem::discriminant(&kind)
     }
@@ -138,7 +178,7 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{Node, Statement};
+    use crate::ast::{Expression, Node, Statement};
 
     use super::*;
 
@@ -218,5 +258,27 @@ return 993322;"
             // TODO(alvaro): Actually implement this
             // assert_eq!(ret_stmt.value.token_literal(), exp_value);
         }
+    }
+
+    #[test]
+    fn test_identifier_expression() {
+        let input = "foobar;".to_string();
+
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+
+        check_parser_errors(&mut parser);
+
+        assert_eq!(program.statements.len(), 1);
+        let ident = &program.statements[0];
+        assert!(matches!(ident, Statement::Expression(..)));
+
+        let Statement::Expression(Expression::Identifier(ident)) = ident else {
+            unreachable!()
+        };
+
+        assert_eq!(ident.value, "foobar");
+        assert_eq!(ident.token_literal(), "foobar");
     }
 }
