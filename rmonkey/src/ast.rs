@@ -1,11 +1,14 @@
 #![allow(dead_code)]
 
+use std::fmt::Display;
+
 use crate::token::Token;
 
 pub trait Node {
     fn token_literal(&self) -> &str;
 }
 
+#[derive(Debug, Clone)]
 pub enum Expression {
     Missing,
     Identifier(Identifier),
@@ -20,12 +23,41 @@ impl Node for Expression {
     }
 }
 
-pub enum Statement {
-    Let(Let),
+impl Display for Expression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.token_literal())?;
+        Ok(())
+    }
 }
 
-impl Statement {}
+#[derive(Debug, Clone)]
+pub enum Statement {
+    Let(Let),
+    Return(Return),
+    Expression(Expression),
+}
 
+impl Node for Statement {
+    fn token_literal(&self) -> &str {
+        match self {
+            Statement::Let(stmt) => stmt.token_literal(),
+            Statement::Return(stmt) => stmt.token_literal(),
+            Statement::Expression(stmt) => stmt.token_literal(),
+        }
+    }
+}
+
+impl Display for Statement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Statement::Let(stmt) => stmt.fmt(f),
+            Statement::Return(stmt) => stmt.fmt(f),
+            Statement::Expression(stmt) => stmt.fmt(f),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Let {
     pub token: Token,
     // TODO(alvaro): This should point to the same identifier
@@ -45,6 +77,45 @@ impl Node for Let {
     }
 }
 
+impl Display for Let {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} {} = {};",
+            self.token_literal(),
+            self.name,
+            self.value
+        )?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Return {
+    pub token: Token,
+    pub value: Expression,
+}
+
+impl Return {
+    pub fn new(token: Token, value: Expression) -> Self {
+        Self { token, value }
+    }
+}
+
+impl Node for Return {
+    fn token_literal(&self) -> &str {
+        self.token.literal.as_ref()
+    }
+}
+
+impl Display for Return {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {};", self.token_literal(), self.value,)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Identifier {
     pub token: Token,
     pub value: String,
@@ -62,14 +133,14 @@ impl Node for Identifier {
     }
 }
 
-impl Node for Statement {
-    fn token_literal(&self) -> &str {
-        match self {
-            Statement::Let(stmt) => stmt.token_literal(),
-        }
+impl Display for Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)?;
+        Ok(())
     }
 }
 
+#[derive(Debug)]
 pub struct Program {
     pub statements: Vec<Statement>,
 }
@@ -87,5 +158,38 @@ impl Node for Program {
         } else {
             self.statements[0].token_literal()
         }
+    }
+}
+
+impl Display for Program {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.statements
+            .iter()
+            .try_for_each(|s| write!(f, "{}", s))?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::token::{Token, TokenKind};
+
+    use super::*;
+
+    #[test]
+    fn test_string() {
+        let program = Program::new(vec![Statement::Let(Let::new(
+            Token::new(TokenKind::Let, "let".to_string()),
+            Identifier::new(
+                Token::new(TokenKind::Identifier, "myVar".to_string()),
+                "myVar".to_string(),
+            ),
+            Expression::Identifier(Identifier::new(
+                Token::new(TokenKind::Identifier, "anotherVar".to_string()),
+                "anotherVar".to_string(),
+            )),
+        ))]);
+
+        assert_eq!(format!("{}", program), "let myVar = anotherVar;");
     }
 }

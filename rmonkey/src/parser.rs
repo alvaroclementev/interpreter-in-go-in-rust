@@ -51,6 +51,7 @@ impl Parser {
     fn parse_statement(&mut self) -> Option<ast::Statement> {
         match self.current.kind {
             TokenKind::Let => self.parse_let_statement(),
+            TokenKind::Return => self.parse_return_statement(),
             _ => None,
         }
     }
@@ -83,6 +84,26 @@ impl Parser {
         Some(ast::Statement::Let(ast::Let::new(
             let_token,
             identifier,
+            ast::Expression::Missing,
+        )))
+    }
+
+    fn parse_return_statement(&mut self) -> Option<ast::Statement> {
+        let ret_token = self.current.clone();
+
+        self.next_token();
+
+        // TODO(alvaro): We should parse the real value here
+        loop {
+            // Skip until the semicolon
+            if !self.current_is(TokenKind::Semicolon) {
+                break;
+            }
+            self.next_token()
+        }
+
+        Some(ast::Statement::Return(ast::Return::new(
+            ret_token,
             ast::Expression::Missing,
         )))
     }
@@ -155,13 +176,47 @@ let foobar = 838383;"
 
             // Check that it contains a "let" value
             assert_eq!(statement.token_literal(), "let");
-            let Statement::Let(let_stmt) = statement;
+            let Statement::Let(let_stmt) = statement else {
+                unreachable!()
+            };
 
             // Check that the name is the expected identifier value
             assert_eq!(let_stmt.name.value, exp_ident);
 
             // Check that the token literal is also the expected value
             assert_eq!(let_stmt.name.token_literal(), exp_ident);
+        }
+    }
+
+    #[test]
+    fn test_return_statements() {
+        let input = "return 5;
+return 10;
+return 993322;"
+            .to_string();
+
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+
+        let program = parser.parse();
+        check_parser_errors(&mut parser);
+        assert_eq!(program.statements.len(), 3);
+
+        let expected_values = ["5", "10", "993322"];
+
+        for (statement, exp_value) in program.statements.into_iter().zip(expected_values) {
+            // Check the type of node
+            assert!(matches!(statement, Statement::Return(..)));
+
+            // Check that it contains a "return" value
+            assert_eq!(statement.token_literal(), "return");
+            let Statement::Return(ret_stmt) = statement else {
+                unreachable!()
+            };
+
+            // Check that the token literal is also the expected value
+            // TODO(alvaro): Actually implement this
+            // assert_eq!(ret_stmt.value.token_literal(), exp_value);
         }
     }
 }
