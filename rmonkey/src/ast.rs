@@ -12,6 +12,7 @@ pub trait Node {
 pub enum Expression {
     Missing,
     Identifier(Identifier),
+    IntegerLiteral(IntegerLiteral),
 }
 
 impl Node for Expression {
@@ -19,6 +20,7 @@ impl Node for Expression {
         match self {
             Expression::Missing => "<missing>",
             Expression::Identifier(expr) => expr.token.literal.as_ref(),
+            Expression::IntegerLiteral(expr) => expr.token.literal.as_ref(),
         }
     }
 }
@@ -26,6 +28,56 @@ impl Node for Expression {
 impl Display for Expression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.token_literal())?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Identifier {
+    pub token: Token,
+    pub value: String,
+}
+
+impl Identifier {
+    pub fn new(token: Token, value: String) -> Self {
+        Self { token, value }
+    }
+}
+
+impl Node for Identifier {
+    fn token_literal(&self) -> &str {
+        self.token.literal.as_ref()
+    }
+}
+
+impl Display for Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct IntegerLiteral {
+    pub token: Token,
+    pub value: i64,
+}
+
+impl IntegerLiteral {
+    pub fn new(token: Token, value: i64) -> Self {
+        Self { token, value }
+    }
+}
+
+impl Node for IntegerLiteral {
+    fn token_literal(&self) -> &str {
+        self.token.literal.as_ref()
+    }
+}
+
+impl Display for IntegerLiteral {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)?;
         Ok(())
     }
 }
@@ -111,31 +163,6 @@ impl Node for Return {
 impl Display for Return {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} {};", self.token_literal(), self.value,)?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Identifier {
-    pub token: Token,
-    pub value: String,
-}
-
-impl Identifier {
-    pub fn new(token: Token, value: String) -> Self {
-        Self { token, value }
-    }
-}
-
-impl Node for Identifier {
-    fn token_literal(&self) -> &str {
-        self.token.literal.as_ref()
-    }
-}
-
-impl Display for Identifier {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.value)?;
         Ok(())
     }
 }

@@ -86,7 +86,7 @@ impl Parser {
         // TODO(alvaro): We should parse the real value here
         loop {
             // Skip until the semicolon
-            if !self.current_is(TokenKind::Semicolon) {
+            if self.current_is(TokenKind::Semicolon) {
                 break;
             }
             self.next_token()
@@ -107,7 +107,7 @@ impl Parser {
         // TODO(alvaro): We should parse the real value here
         loop {
             // Skip until the semicolon
-            if !self.current_is(TokenKind::Semicolon) {
+            if self.current_is(TokenKind::Semicolon) {
                 break;
             }
             self.next_token()
@@ -137,15 +137,34 @@ impl Parser {
     }
 
     fn parse_expression_prefix(&mut self, kind: TokenKind) -> Option<ast::Expression> {
-        match kind {
-            TokenKind::Identifier => Some(self.parse_identifier()),
-            _ => None,
+        let result = match kind {
+            TokenKind::Identifier => self.parse_identifier(),
+            TokenKind::Int => self.parse_integer_literal(),
+            _ => Err("unimplemented".to_string()),
+        };
+        // Report the error and return
+        match result {
+            Ok(r) => Some(r),
+            Err(msg) => {
+                self.errors.push(msg);
+                None
+            }
         }
     }
 
-    fn parse_identifier(&self) -> ast::Expression {
+    fn parse_identifier(&self) -> Result<ast::Expression, String> {
         let ident = ast::Identifier::new(self.current.clone(), self.current.literal.clone());
-        ast::Expression::Identifier(ident)
+        Ok(ast::Expression::Identifier(ident))
+    }
+
+    fn parse_integer_literal(&self) -> Result<ast::Expression, String> {
+        let value = self
+            .current
+            .literal
+            .parse()
+            .map_err(|e| format!("error parsing integer literal: {e}"))?;
+        let literal = ast::IntegerLiteral::new(self.current.clone(), value);
+        Ok(ast::Expression::IntegerLiteral(literal))
     }
 
     fn current_is(&self, kind: TokenKind) -> bool {
@@ -272,7 +291,10 @@ return 993322;"
 
         assert_eq!(program.statements.len(), 1);
         let ident = &program.statements[0];
-        assert!(matches!(ident, Statement::Expression(..)));
+        assert!(matches!(
+            ident,
+            Statement::Expression(Expression::Identifier(..))
+        ));
 
         let Statement::Expression(Expression::Identifier(ident)) = ident else {
             unreachable!()
@@ -280,5 +302,30 @@ return 993322;"
 
         assert_eq!(ident.value, "foobar");
         assert_eq!(ident.token_literal(), "foobar");
+    }
+
+    #[test]
+    fn test_integer_literal_expression() {
+        let input = "5;".to_string();
+
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+
+        check_parser_errors(&mut parser);
+
+        assert_eq!(program.statements.len(), 1);
+        let literal = &program.statements[0];
+        assert!(matches!(
+            literal,
+            Statement::Expression(Expression::IntegerLiteral(..))
+        ));
+
+        let Statement::Expression(Expression::IntegerLiteral(literal)) = literal else {
+            unreachable!()
+        };
+
+        assert_eq!(literal.value, 5);
+        assert_eq!(literal.token_literal(), "5");
     }
 }
