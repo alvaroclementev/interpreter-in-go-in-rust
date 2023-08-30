@@ -14,6 +14,7 @@ pub enum Expression {
     Identifier(Identifier),
     IntegerLiteral(IntegerLiteral),
     Prefix(PrefixExpression),
+    Infix(InfixExpression),
 }
 
 impl Node for Expression {
@@ -23,14 +24,20 @@ impl Node for Expression {
             Expression::Identifier(expr) => expr.token.literal.as_ref(),
             Expression::IntegerLiteral(expr) => expr.token.literal.as_ref(),
             Expression::Prefix(expr) => expr.token.literal.as_ref(),
+            Expression::Infix(expr) => expr.token.literal.as_ref(),
         }
     }
 }
 
 impl Display for Expression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.token_literal())?;
-        Ok(())
+        match self {
+            Expression::Missing => write!(f, "{}", self.token_literal()),
+            Expression::Identifier(expr) => expr.fmt(f),
+            Expression::IntegerLiteral(expr) => expr.fmt(f),
+            Expression::Prefix(expr) => expr.fmt(f),
+            Expression::Infix(expr) => expr.fmt(f),
+        }
     }
 }
 
@@ -110,6 +117,43 @@ impl Node for PrefixExpression {
 impl Display for PrefixExpression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({}{})", self.operator, self.right)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct InfixExpression {
+    pub token: Token,
+    pub left: Rc<Expression>,
+    pub operator: String,
+    pub right: Rc<Expression>,
+}
+
+impl InfixExpression {
+    pub fn new(
+        token: Token,
+        left: Rc<Expression>,
+        operator: String,
+        right: Rc<Expression>,
+    ) -> Self {
+        Self {
+            token,
+            left,
+            operator,
+            right,
+        }
+    }
+}
+
+impl Node for InfixExpression {
+    fn token_literal(&self) -> &str {
+        self.token.literal.as_ref()
+    }
+}
+
+impl Display for InfixExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({} {} {})", self.left, self.operator, self.right)?;
         Ok(())
     }
 }
@@ -222,9 +266,10 @@ impl Node for Program {
 
 impl Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.statements
-            .iter()
-            .try_for_each(|s| write!(f, "{}", s))?;
+        self.statements.iter().try_for_each(|s| {
+            println!("Displaying statement: {:?}", &s);
+            write!(f, "{}", s)
+        })?;
         Ok(())
     }
 }

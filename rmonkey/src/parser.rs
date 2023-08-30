@@ -19,6 +19,22 @@ pub enum Precedence {
     Call,
 }
 
+impl Precedence {
+    fn for_token(token: TokenKind) -> Self {
+        match token {
+            TokenKind::Eq => Precedence::Equals,
+            TokenKind::NotEq => Precedence::Equals,
+            TokenKind::Lt => Precedence::LessGreater,
+            TokenKind::Gt => Precedence::LessGreater,
+            TokenKind::Plus => Precedence::Sum,
+            TokenKind::Minus => Precedence::Sum,
+            TokenKind::Slash => Precedence::Product,
+            TokenKind::Asterisk => Precedence::Product,
+            _ => Precedence::Lowest,
+        }
+    }
+}
+
 pub struct Parser {
     lexer: Lexer,
 
@@ -122,8 +138,6 @@ impl Parser {
     }
 
     fn parse_expression_statement(&mut self) -> Option<ast::Statement> {
-        println!("Parsing Expression Statement: {:?}", &self.current);
-
         let expr = self.parse_expression(Precedence::Lowest)?;
         let statement = ast::Statement::Expression(expr);
 
@@ -134,8 +148,20 @@ impl Parser {
         Some(statement)
     }
 
-    fn parse_expression(&mut self, _precedence: Precedence) -> Option<ast::Expression> {
-        self.parse_expression_as_prefix(self.current.kind)
+    fn parse_expression(&mut self, precedence: Precedence) -> Option<ast::Expression> {
+        let mut left = self.parse_expression_as_prefix(self.current.kind)?;
+
+        while !self.peek_is(TokenKind::Semicolon) && precedence < self.peek_precedence() {
+            let peek_kind = self.peek.kind;
+            self.next_token();
+            // NOTE(alvaro): This clone is a bit sad
+            if let Some(new_left) = self.parse_expression_as_infix(peek_kind, left.clone()) {
+                left = new_left;
+            } else {
+                break;
+            }
+        }
+        Some(left)
     }
 
     fn parse_expression_as_prefix(&mut self, kind: TokenKind) -> Option<ast::Expression> {
@@ -144,7 +170,33 @@ impl Parser {
             TokenKind::Int => self.parse_integer_literal(),
             TokenKind::Bang => self.parse_prefix_expression(),
             TokenKind::Minus => self.parse_prefix_expression(),
-            kind => Err(format!("unimplemented ({:?})", kind)),
+            kind => Err(format!("unimplemented prefix ({:?})", kind)),
+        };
+        // Report the error and return
+        match result {
+            Ok(r) => Some(r),
+            Err(msg) => {
+                self.errors.push(msg);
+                None
+            }
+        }
+    }
+
+    fn parse_expression_as_infix(
+        &mut self,
+        kind: TokenKind,
+        left: ast::Expression,
+    ) -> Option<ast::Expression> {
+        let result = match kind {
+            TokenKind::Plus => self.parse_infix_expression(left),
+            TokenKind::Minus => self.parse_infix_expression(left),
+            TokenKind::Slash => self.parse_infix_expression(left),
+            TokenKind::Asterisk => self.parse_infix_expression(left),
+            TokenKind::Eq => self.parse_infix_expression(left),
+            TokenKind::NotEq => self.parse_infix_expression(left),
+            TokenKind::Lt => self.parse_infix_expression(left),
+            TokenKind::Gt => self.parse_infix_expression(left),
+            kind => Err(format!("unimplemented infix ({:?})", kind)),
         };
         // Report the error and return
         match result {
@@ -185,6 +237,23 @@ impl Parser {
         Ok(ast::Expression::Prefix(prefix))
     }
 
+    fn parse_infix_expression(&mut self, left: ast::Expression) -> Result<ast::Expression, String> {
+        let token = self.current.clone();
+        let literal = token.literal.clone();
+
+        let precedence = self.current_precedence();
+
+        self.next_token();
+
+        let right_expr = self
+            .parse_expression(precedence)
+            .ok_or("failed to parse RHS of infix expression")?;
+
+        let infix = ast::InfixExpression::new(token, Rc::new(left), literal, Rc::new(right_expr));
+
+        Ok(ast::Expression::Infix(infix))
+    }
+
     fn current_is(&self, kind: TokenKind) -> bool {
         std::mem::discriminant(&self.current.kind) == std::mem::discriminant(&kind)
     }
@@ -210,6 +279,14 @@ impl Parser {
             "expected next token to be {:?}, got {:?} instead",
             kind, self.peek.kind
         ));
+    }
+
+    fn peek_precedence(&self) -> Precedence {
+        Precedence::for_token(self.peek.kind)
+    }
+
+    fn current_precedence(&self) -> Precedence {
+        Precedence::for_token(self.current.kind)
     }
 }
 
@@ -291,13 +368,13 @@ return 993322;"
 
         let expected_values = ["5", "10", "993322"];
 
-        for (statement, exp_value) in program.statements.into_iter().zip(expected_values) {
+        for (statement, _exp_value) in program.statements.into_iter().zip(expected_values) {
             // Check the type of node
             assert!(matches!(statement, Statement::Return(..)));
 
             // Check that it contains a "return" value
             assert_eq!(statement.token_literal(), "return");
-            let Statement::Return(ret_stmt) = statement else {
+            let Statement::Return(_ret_stmt) = statement else {
                 unreachable!()
             };
 
@@ -348,7 +425,7 @@ return 993322;"
         let Statement::Expression(literal) = literal else {
             unreachable!()
         };
-        check_integer_literal(&literal, 5);
+        check_integer_literal(literal, 5);
     }
 
     #[test]
@@ -390,6 +467,157 @@ return 993322;"
 
             assert_eq!(expr.operator, test.operator);
             check_integer_literal(&expr.right, test.integer_value);
+        }
+    }
+
+    #[test]
+    fn test_parsing_infix_expressions() {
+        struct Test {
+            input: String,
+            left_value: i64,
+            operator: String,
+            right_value: i64,
+        }
+        let tests = vec![
+            Test {
+                input: "6 + 5;".to_string(),
+                left_value: 6,
+                operator: "+".to_string(),
+                right_value: 5,
+            },
+            Test {
+                input: "6 - 5;".to_string(),
+                left_value: 6,
+                operator: "-".to_string(),
+                right_value: 5,
+            },
+            Test {
+                input: "6 * 5;".to_string(),
+                left_value: 6,
+                operator: "*".to_string(),
+                right_value: 5,
+            },
+            Test {
+                input: "6 / 5;".to_string(),
+                left_value: 6,
+                operator: "/".to_string(),
+                right_value: 5,
+            },
+            Test {
+                input: "6 > 5;".to_string(),
+                left_value: 6,
+                operator: ">".to_string(),
+                right_value: 5,
+            },
+            Test {
+                input: "6 < 5;".to_string(),
+                left_value: 6,
+                operator: "<".to_string(),
+                right_value: 5,
+            },
+            Test {
+                input: "6 == 5;".to_string(),
+                left_value: 6,
+                operator: "==".to_string(),
+                right_value: 5,
+            },
+            Test {
+                input: "6 != 5;".to_string(),
+                left_value: 6,
+                operator: "!=".to_string(),
+                right_value: 5,
+            },
+        ];
+
+        for test in tests {
+            let lexer = Lexer::new(test.input);
+            let mut parser = Parser::new(lexer);
+            let program = parser.parse();
+            check_parser_errors(&mut parser);
+
+            assert_eq!(program.statements.len(), 1);
+            let expr = &program.statements[0];
+            assert!(matches!(expr, Statement::Expression(Expression::Infix(..))));
+
+            let Statement::Expression(Expression::Infix(expr)) = expr else {
+                unreachable!()
+            };
+
+            check_integer_literal(&expr.left, test.left_value);
+            assert_eq!(expr.operator, test.operator);
+            check_integer_literal(&expr.right, test.right_value);
+        }
+    }
+
+    #[test]
+    fn test_operator_precedence_parsing() {
+        struct Test {
+            input: String,
+            expected: String,
+        }
+        let tests = vec![
+            Test {
+                input: "-a * b".to_string(),
+                expected: "((-a) * b)".to_string(),
+            },
+            Test {
+                input: "!-a".to_string(),
+                expected: "(!(-a))".to_string(),
+            },
+            Test {
+                input: "a + b + c".to_string(),
+                expected: "((a + b) + c)".to_string(),
+            },
+            Test {
+                input: "a + b - c".to_string(),
+                expected: "((a + b) - c)".to_string(),
+            },
+            Test {
+                input: "a * b * c".to_string(),
+                expected: "((a * b) * c)".to_string(),
+            },
+            Test {
+                input: "a * b / c".to_string(),
+                expected: "((a * b) / c)".to_string(),
+            },
+            Test {
+                input: "a + b / c".to_string(),
+                expected: "(a + (b / c))".to_string(),
+            },
+            Test {
+                input: "a + b * c + d / e - f".to_string(),
+                expected: "(((a + (b * c)) + (d / e)) - f)".to_string(),
+            },
+            Test {
+                input: "3 + 4; -5 * 5".to_string(),
+                expected: "(3 + 4)((-5) * 5)".to_string(),
+            },
+            Test {
+                input: "5 > 4 == 3 < 4".to_string(),
+                expected: "((5 > 4) == (3 < 4))".to_string(),
+            },
+            Test {
+                input: "5 < 4 != 3 > 4".to_string(),
+                expected: "((5 < 4) != (3 > 4))".to_string(),
+            },
+            Test {
+                input: "3 + 4 * 5 == 3 * 1 + 4 * 5".to_string(),
+                expected: "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))".to_string(),
+            },
+            Test {
+                input: "3 + 4 * 5 == 3 * 1 + 4 * 5".to_string(),
+                expected: "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))".to_string(),
+            },
+        ];
+
+        for test in tests {
+            let lexer = Lexer::new(test.input);
+            let mut parser = Parser::new(lexer);
+            let program = parser.parse();
+            check_parser_errors(&mut parser);
+
+            let actual = format!("{}", program);
+            assert_eq!(actual, test.expected);
         }
     }
 }
