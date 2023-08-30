@@ -364,11 +364,11 @@ return 993322;"
                 operator: "!".to_string(),
                 integer_value: 5,
             },
-            // Test {
-            //     input: "-15".to_string(),
-            //     operator: "-".to_string(),
-            //     integer_value: 15,
-            // },
+            Test {
+                input: "-15".to_string(),
+                operator: "-".to_string(),
+                integer_value: 15,
+            },
         ];
 
         for test in tests {
