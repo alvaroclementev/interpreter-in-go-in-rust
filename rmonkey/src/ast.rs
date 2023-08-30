@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::fmt::Display;
+use std::{fmt::Display, rc::Rc};
 
 use crate::token::Token;
 
@@ -13,6 +13,7 @@ pub enum Expression {
     Missing,
     Identifier(Identifier),
     IntegerLiteral(IntegerLiteral),
+    Prefix(PrefixExpression),
 }
 
 impl Node for Expression {
@@ -21,6 +22,7 @@ impl Node for Expression {
             Expression::Missing => "<missing>",
             Expression::Identifier(expr) => expr.token.literal.as_ref(),
             Expression::IntegerLiteral(expr) => expr.token.literal.as_ref(),
+            Expression::Prefix(expr) => expr.token.literal.as_ref(),
         }
     }
 }
@@ -78,6 +80,36 @@ impl Node for IntegerLiteral {
 impl Display for IntegerLiteral {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.value)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PrefixExpression {
+    pub token: Token,
+    pub operator: String,
+    pub right: Rc<Expression>,
+}
+
+impl PrefixExpression {
+    pub fn new(token: Token, operator: String, right: Rc<Expression>) -> Self {
+        Self {
+            token,
+            operator,
+            right,
+        }
+    }
+}
+
+impl Node for PrefixExpression {
+    fn token_literal(&self) -> &str {
+        self.token.literal.as_ref()
+    }
+}
+
+impl Display for PrefixExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}{})", self.operator, self.right)?;
         Ok(())
     }
 }

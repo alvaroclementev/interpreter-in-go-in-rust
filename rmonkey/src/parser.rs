@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use std::rc::Rc;
+
 use crate::{
     ast,
     lexer::Lexer,
@@ -133,14 +135,16 @@ impl Parser {
     }
 
     fn parse_expression(&mut self, _precedence: Precedence) -> Option<ast::Expression> {
-        self.parse_expression_prefix(self.current.kind)
+        self.parse_expression_as_prefix(self.current.kind)
     }
 
-    fn parse_expression_prefix(&mut self, kind: TokenKind) -> Option<ast::Expression> {
+    fn parse_expression_as_prefix(&mut self, kind: TokenKind) -> Option<ast::Expression> {
         let result = match kind {
             TokenKind::Identifier => self.parse_identifier(),
             TokenKind::Int => self.parse_integer_literal(),
-            _ => Err("unimplemented".to_string()),
+            TokenKind::Bang => self.parse_prefix_expression(),
+            TokenKind::Minus => self.parse_prefix_expression(),
+            kind => Err(format!("unimplemented ({:?})", kind)),
         };
         // Report the error and return
         match result {
@@ -165,6 +169,20 @@ impl Parser {
             .map_err(|e| format!("error parsing integer literal: {e}"))?;
         let literal = ast::IntegerLiteral::new(self.current.clone(), value);
         Ok(ast::Expression::IntegerLiteral(literal))
+    }
+
+    fn parse_prefix_expression(&mut self) -> Result<ast::Expression, String> {
+        let token = self.current.clone();
+        let literal = token.literal.clone();
+
+        self.next_token();
+        let right_expr = self
+            .parse_expression(Precedence::Prefix)
+            .ok_or("failed to parse RHS of prefix expression")?;
+
+        let prefix = ast::PrefixExpression::new(token, literal, Rc::new(right_expr));
+
+        Ok(ast::Expression::Prefix(prefix))
     }
 
     fn current_is(&self, kind: TokenKind) -> bool {
@@ -211,6 +229,16 @@ mod tests {
         }
 
         panic!("found parser errors");
+    }
+
+    fn check_integer_literal(expr: &Expression, value: i64) {
+        match expr {
+            Expression::IntegerLiteral(lit) => {
+                assert_eq!(lit.value, value);
+                assert_eq!(lit.token_literal(), value.to_string());
+            }
+            _ => panic!("expr is not an IntegerLiteral: {:?}", expr),
+        }
     }
 
     #[test]
@@ -316,16 +344,52 @@ return 993322;"
 
         assert_eq!(program.statements.len(), 1);
         let literal = &program.statements[0];
-        assert!(matches!(
-            literal,
-            Statement::Expression(Expression::IntegerLiteral(..))
-        ));
-
-        let Statement::Expression(Expression::IntegerLiteral(literal)) = literal else {
+        assert!(matches!(literal, Statement::Expression(..)));
+        let Statement::Expression(literal) = literal else {
             unreachable!()
         };
+        check_integer_literal(&literal, 5);
+    }
 
-        assert_eq!(literal.value, 5);
-        assert_eq!(literal.token_literal(), "5");
+    #[test]
+    fn test_parsing_prefix_expressions() {
+        struct Test {
+            input: String,
+            operator: String,
+            integer_value: i64,
+        }
+        let tests = vec![
+            Test {
+                input: "!5".to_string(),
+                operator: "!".to_string(),
+                integer_value: 5,
+            },
+            // Test {
+            //     input: "-15".to_string(),
+            //     operator: "-".to_string(),
+            //     integer_value: 15,
+            // },
+        ];
+
+        for test in tests {
+            let lexer = Lexer::new(test.input);
+            let mut parser = Parser::new(lexer);
+            let program = parser.parse();
+            check_parser_errors(&mut parser);
+
+            assert_eq!(program.statements.len(), 1);
+            let expr = &program.statements[0];
+            assert!(matches!(
+                expr,
+                Statement::Expression(Expression::Prefix(..))
+            ));
+
+            let Statement::Expression(Expression::Prefix(expr)) = expr else {
+                unreachable!()
+            };
+
+            assert_eq!(expr.operator, test.operator);
+            check_integer_literal(&expr.right, test.integer_value);
+        }
     }
 }
