@@ -172,6 +172,7 @@ impl Parser {
             TokenKind::Minus => self.parse_prefix_expression(),
             TokenKind::True => self.parse_boolean_literal(),
             TokenKind::False => self.parse_boolean_literal(),
+            TokenKind::LParen => self.parse_grouped_expression(),
 
             kind => Err(format!("unimplemented prefix ({:?})", kind)),
         };
@@ -261,6 +262,17 @@ impl Parser {
         let infix = ast::InfixExpression::new(token, Rc::new(left), literal, Rc::new(right_expr));
 
         Ok(ast::Expression::Infix(infix))
+    }
+
+    fn parse_grouped_expression(&mut self) -> Result<ast::Expression, String> {
+        self.next_token();
+        let expr = self
+            .parse_expression(Precedence::Lowest)
+            .ok_or("failed to parse grouped expression")?;
+        if !self.expect_peek(TokenKind::RParen) {
+            return Err("expected a ')' when parsing a grouped expression".to_string());
+        }
+        Ok(expr)
     }
 
     fn current_is(&self, kind: TokenKind) -> bool {
@@ -783,6 +795,26 @@ mod tests {
             Test {
                 input: "3 < 5 == true".to_string(),
                 expected: "((3 < 5) == true)".to_string(),
+            },
+            Test {
+                input: "1 + (2 + 3) + 4".to_string(),
+                expected: "((1 + (2 + 3)) + 4)".to_string(),
+            },
+            Test {
+                input: "(5 + 5) * 2".to_string(),
+                expected: "((5 + 5) * 2)".to_string(),
+            },
+            Test {
+                input: "2 / (5 + 5)".to_string(),
+                expected: "(2 / (5 + 5))".to_string(),
+            },
+            Test {
+                input: "-(5 + 5)".to_string(),
+                expected: "(-(5 + 5))".to_string(),
+            },
+            Test {
+                input: "!(true == true)".to_string(),
+                expected: "(!(true == true))".to_string(),
             },
         ];
 
