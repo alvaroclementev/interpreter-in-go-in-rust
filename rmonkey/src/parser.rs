@@ -170,6 +170,9 @@ impl Parser {
             TokenKind::Int => self.parse_integer_literal(),
             TokenKind::Bang => self.parse_prefix_expression(),
             TokenKind::Minus => self.parse_prefix_expression(),
+            TokenKind::True => self.parse_boolean_literal(),
+            TokenKind::False => self.parse_boolean_literal(),
+
             kind => Err(format!("unimplemented prefix ({:?})", kind)),
         };
         // Report the error and return
@@ -221,6 +224,12 @@ impl Parser {
             .map_err(|e| format!("error parsing integer literal: {e}"))?;
         let literal = ast::IntegerLiteral::new(self.current.clone(), value);
         Ok(ast::Expression::IntegerLiteral(literal))
+    }
+
+    fn parse_boolean_literal(&self) -> Result<ast::Expression, String> {
+        let value = self.current_is(TokenKind::True);
+        let literal = ast::BooleanLiteral::new(self.current.clone(), value);
+        Ok(ast::Expression::BooleanLiteral(literal))
     }
 
     fn parse_prefix_expression(&mut self) -> Result<ast::Expression, String> {
@@ -298,6 +307,7 @@ mod tests {
 
     enum TestValue {
         Int(i64),
+        Bool(bool),
         String(String),
     }
 
@@ -334,6 +344,16 @@ mod tests {
         }
     }
 
+    fn check_bool_literal(expr: &Expression, value: bool) {
+        match expr {
+            Expression::BooleanLiteral(lit) => {
+                assert_eq!(lit.value, value);
+                assert_eq!(lit.token_literal(), value.to_string());
+            }
+            _ => panic!("expr is not an BooleanLiteral: {:?}", expr),
+        }
+    }
+
     fn check_identifier(expr: &Expression, value: impl AsRef<str>) {
         match expr {
             Expression::Identifier(ident) => {
@@ -347,6 +367,7 @@ mod tests {
     fn check_literal_expression(expr: &Expression, expected: TestValue) {
         match expected {
             TestValue::Int(value) => check_integer_literal(expr, value),
+            TestValue::Bool(value) => check_bool_literal(expr, value),
             TestValue::String(value) => check_identifier(expr, value),
         }
     }
@@ -380,12 +401,11 @@ mod tests {
                 ident: "x".to_string(),
                 value: TestValue::Int(5),
             },
-            // TODO(alvaro): Enable this when the boolean are implemented
-            // Test {
-            //     input: "let y = true;".to_string(),
-            //     ident: "y".to_string(),
-            //     value: TestValue::Bool(true),
-            // },
+            Test {
+                input: "let y = true;".to_string(),
+                ident: "y".to_string(),
+                value: TestValue::Bool(true),
+            },
             Test {
                 input: "let foobar = y;".to_string(),
                 ident: "foobar".to_string(),
@@ -423,11 +443,10 @@ mod tests {
                 input: "return 5;".to_string(),
                 value: TestValue::Int(5),
             },
-            // TODO(alvaro): Enable this when the boolean are implemented
-            // Test {
-            //     input: "return false;".to_string(),
-            //     value: TestValue::Bool(false),
-            // },
+            Test {
+                input: "return false;".to_string(),
+                value: TestValue::Bool(false),
+            },
             Test {
                 input: "return foobar;".to_string(),
                 value: TestValue::String("foobar".to_string()),
@@ -503,18 +522,28 @@ mod tests {
         struct Test {
             input: String,
             operator: String,
-            integer_value: i64,
+            value: TestValue,
         }
         let tests = vec![
             Test {
                 input: "!5".to_string(),
                 operator: "!".to_string(),
-                integer_value: 5,
+                value: TestValue::Int(5),
             },
             Test {
                 input: "-15".to_string(),
                 operator: "-".to_string(),
-                integer_value: 15,
+                value: TestValue::Int(15),
+            },
+            Test {
+                input: "!true".to_string(),
+                operator: "!".to_string(),
+                value: TestValue::Bool(true),
+            },
+            Test {
+                input: "!false".to_string(),
+                operator: "!".to_string(),
+                value: TestValue::Bool(false),
             },
         ];
 
@@ -536,7 +565,7 @@ mod tests {
             };
 
             assert_eq!(expr.operator, test.operator);
-            check_integer_literal(&expr.right, test.integer_value);
+            check_literal_expression(&expr.right, test.value);
         }
     }
 
@@ -645,25 +674,24 @@ mod tests {
                 operator: "!=".to_string(),
                 right: TestValue::String("barfoo".to_string()),
             },
-            // TODO(alvaro): Uncomment when we implement boolean
-            // Test {
-            //     input: "true == true".to_string(),
-            //     left: TestValue::Bool(true),
-            //     operator: "==".to_string(),
-            //     right: TestValue::Bool(true),
-            // },
-            // Test {
-            //     input: "true != false".to_string(),
-            //     left: TestValue::Bool(true),
-            //     operator: "!=".to_string(),
-            //     right: TestValue::Bool(false),
-            // },
-            // Test {
-            //     input: "false == false".to_string(),
-            //     left: TestValue::Bool(false),
-            //     operator: "==".to_string(),
-            //     right: TestValue::Bool(false),
-            // },
+            Test {
+                input: "true == true".to_string(),
+                left: TestValue::Bool(true),
+                operator: "==".to_string(),
+                right: TestValue::Bool(true),
+            },
+            Test {
+                input: "true != false".to_string(),
+                left: TestValue::Bool(true),
+                operator: "!=".to_string(),
+                right: TestValue::Bool(false),
+            },
+            Test {
+                input: "false == false".to_string(),
+                left: TestValue::Bool(false),
+                operator: "==".to_string(),
+                right: TestValue::Bool(false),
+            },
         ];
 
         for test in tests {
@@ -739,6 +767,22 @@ mod tests {
             Test {
                 input: "3 + 4 * 5 == 3 * 1 + 4 * 5".to_string(),
                 expected: "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))".to_string(),
+            },
+            Test {
+                input: "true".to_string(),
+                expected: "true".to_string(),
+            },
+            Test {
+                input: "false".to_string(),
+                expected: "false".to_string(),
+            },
+            Test {
+                input: "3 > 5 == false".to_string(),
+                expected: "((3 > 5) == false)".to_string(),
+            },
+            Test {
+                input: "3 < 5 == true".to_string(),
+                expected: "((3 < 5) == true)".to_string(),
             },
         ];
 
