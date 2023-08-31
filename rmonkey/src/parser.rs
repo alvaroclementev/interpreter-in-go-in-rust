@@ -296,6 +296,11 @@ mod tests {
 
     use super::*;
 
+    enum TestValue {
+        Int(i64),
+        String(String),
+    }
+
     fn check_parser_errors(parser: &mut Parser) {
         if parser.errors.is_empty() {
             return;
@@ -308,6 +313,17 @@ mod tests {
         panic!("found parser errors");
     }
 
+    fn check_let_statement(stmt: &Statement, name: String) {
+        match stmt {
+            Statement::Let(stmt) => {
+                assert_eq!(stmt.token_literal(), "let");
+                assert_eq!(stmt.name.value, name);
+                assert_eq!(stmt.name.token_literal(), name);
+            }
+            stmt => panic!("stmt is not a Let: {:?}", stmt),
+        }
+    }
+
     fn check_integer_literal(expr: &Expression, value: i64) {
         match expr {
             Expression::IntegerLiteral(lit) => {
@@ -318,69 +334,123 @@ mod tests {
         }
     }
 
+    fn check_identifier(expr: &Expression, value: impl AsRef<str>) {
+        match expr {
+            Expression::Identifier(ident) => {
+                assert_eq!(ident.value, value.as_ref());
+                assert_eq!(ident.token_literal(), value.as_ref());
+            }
+            _ => panic!("expr is not an Identifier: {:?}", expr),
+        }
+    }
+
+    fn check_literal_expression(expr: &Expression, expected: TestValue) {
+        match expected {
+            TestValue::Int(value) => check_integer_literal(expr, value),
+            TestValue::String(value) => check_identifier(expr, value),
+        }
+    }
+
+    fn check_infix_expression(
+        expr: &Expression,
+        left: TestValue,
+        operator: &str,
+        right: TestValue,
+    ) {
+        let Expression::Infix(expr) = expr else {
+            panic!("expr is not an Infix: {:?}", expr)
+        };
+
+        check_literal_expression(&expr.left, left);
+        assert_eq!(expr.operator, operator);
+        check_literal_expression(&expr.right, right);
+    }
+
     #[test]
     fn test_let_statements() {
-        let input = "let x = 5;
-let y = 10;
-let foobar = 838383;"
-            .to_string();
+        struct Test {
+            input: String,
+            ident: String,
+            value: TestValue,
+        }
 
-        let lexer = Lexer::new(input);
-        let mut parser = Parser::new(lexer);
+        let tests = [
+            Test {
+                input: "let x = 5;".to_string(),
+                ident: "x".to_string(),
+                value: TestValue::Int(5),
+            },
+            // TODO(alvaro): Enable this when the boolean are implemented
+            // Test {
+            //     input: "let y = true;".to_string(),
+            //     ident: "y".to_string(),
+            //     value: TestValue::Bool(true),
+            // },
+            Test {
+                input: "let foobar = y;".to_string(),
+                ident: "foobar".to_string(),
+                value: TestValue::String("y".to_string()),
+            },
+        ];
 
-        let program = parser.parse();
-        check_parser_errors(&mut parser);
-        assert_eq!(program.statements.len(), 3);
+        for test in tests {
+            let lexer = Lexer::new(test.input);
+            let mut parser = Parser::new(lexer);
+            let program = parser.parse();
+            check_parser_errors(&mut parser);
 
-        let expected_idents = ["x", "y", "foobar"];
+            assert_eq!(program.statements.len(), 1);
 
-        for (statement, exp_ident) in program.statements.into_iter().zip(expected_idents) {
-            // Check the type of node
-            assert!(matches!(statement, Statement::Let(..)));
-
-            // Check that it contains a "let" value
-            assert_eq!(statement.token_literal(), "let");
-            let Statement::Let(let_stmt) = statement else {
+            let stmt = &program.statements[0];
+            check_let_statement(stmt, test.ident);
+            let Statement::Let(_let_stmt) = stmt else {
                 unreachable!()
             };
-
-            // Check that the name is the expected identifier value
-            assert_eq!(let_stmt.name.value, exp_ident);
-
-            // Check that the token literal is also the expected value
-            assert_eq!(let_stmt.name.token_literal(), exp_ident);
+            // FIXME(alvaro): Implement parsing the value of the let expression
+            // check_literal_expression(&let_stmt.value, test.value);
         }
     }
 
     #[test]
     fn test_return_statements() {
-        let input = "return 5;
-return 10;
-return 993322;"
-            .to_string();
+        struct Test {
+            input: String,
+            value: TestValue,
+        }
 
-        let lexer = Lexer::new(input);
-        let mut parser = Parser::new(lexer);
+        let tests = [
+            Test {
+                input: "return 5;".to_string(),
+                value: TestValue::Int(5),
+            },
+            // TODO(alvaro): Enable this when the boolean are implemented
+            // Test {
+            //     input: "return false;".to_string(),
+            //     value: TestValue::Bool(false),
+            // },
+            Test {
+                input: "return foobar;".to_string(),
+                value: TestValue::String("foobar".to_string()),
+            },
+        ];
 
-        let program = parser.parse();
-        check_parser_errors(&mut parser);
-        assert_eq!(program.statements.len(), 3);
+        for test in tests {
+            let lexer = Lexer::new(test.input);
+            let mut parser = Parser::new(lexer);
+            let program = parser.parse();
+            check_parser_errors(&mut parser);
 
-        let expected_values = ["5", "10", "993322"];
+            assert_eq!(program.statements.len(), 1);
 
-        for (statement, _exp_value) in program.statements.into_iter().zip(expected_values) {
-            // Check the type of node
-            assert!(matches!(statement, Statement::Return(..)));
-
-            // Check that it contains a "return" value
-            assert_eq!(statement.token_literal(), "return");
-            let Statement::Return(_ret_stmt) = statement else {
-                unreachable!()
-            };
-
-            // Check that the token literal is also the expected value
-            // TODO(alvaro): Actually implement this
-            // assert_eq!(ret_stmt.value.token_literal(), exp_value);
+            let stmt = &program.statements[0];
+            match stmt {
+                Statement::Return(ret_stmt) => {
+                    assert_eq!(ret_stmt.token_literal(), "return");
+                    // FIXME(alvaro): Implement parsing the value of the return
+                    // check_literal_expression(&ret_stmt.value, test.value);
+                }
+                stmt => panic!("stmt is not a Return: {:?}", stmt),
+            }
         }
     }
 
@@ -474,59 +544,126 @@ return 993322;"
     fn test_parsing_infix_expressions() {
         struct Test {
             input: String,
-            left_value: i64,
+            left: TestValue,
             operator: String,
-            right_value: i64,
+            right: TestValue,
         }
         let tests = vec![
             Test {
-                input: "6 + 5;".to_string(),
-                left_value: 6,
+                input: "5 + 5;".to_string(),
+                left: TestValue::Int(5),
                 operator: "+".to_string(),
-                right_value: 5,
+                right: TestValue::Int(5),
             },
             Test {
-                input: "6 - 5;".to_string(),
-                left_value: 6,
+                input: "5 - 5;".to_string(),
+                left: TestValue::Int(5),
                 operator: "-".to_string(),
-                right_value: 5,
+                right: TestValue::Int(5),
             },
             Test {
-                input: "6 * 5;".to_string(),
-                left_value: 6,
+                input: "5 * 5;".to_string(),
+                left: TestValue::Int(5),
                 operator: "*".to_string(),
-                right_value: 5,
+                right: TestValue::Int(5),
             },
             Test {
-                input: "6 / 5;".to_string(),
-                left_value: 6,
+                input: "5 / 5;".to_string(),
+                left: TestValue::Int(5),
                 operator: "/".to_string(),
-                right_value: 5,
+                right: TestValue::Int(5),
             },
             Test {
-                input: "6 > 5;".to_string(),
-                left_value: 6,
+                input: "5 > 5;".to_string(),
+                left: TestValue::Int(5),
                 operator: ">".to_string(),
-                right_value: 5,
+                right: TestValue::Int(5),
             },
             Test {
-                input: "6 < 5;".to_string(),
-                left_value: 6,
+                input: "5 < 5;".to_string(),
+                left: TestValue::Int(5),
                 operator: "<".to_string(),
-                right_value: 5,
+                right: TestValue::Int(5),
             },
             Test {
-                input: "6 == 5;".to_string(),
-                left_value: 6,
+                input: "5 == 5;".to_string(),
+                left: TestValue::Int(5),
                 operator: "==".to_string(),
-                right_value: 5,
+                right: TestValue::Int(5),
             },
             Test {
-                input: "6 != 5;".to_string(),
-                left_value: 6,
+                input: "5 != 5;".to_string(),
+                left: TestValue::Int(5),
                 operator: "!=".to_string(),
-                right_value: 5,
+                right: TestValue::Int(5),
             },
+            Test {
+                input: "foobar + barfoo;".to_string(),
+                left: TestValue::String("foobar".to_string()),
+                operator: "+".to_string(),
+                right: TestValue::String("barfoo".to_string()),
+            },
+            Test {
+                input: "foobar - barfoo;".to_string(),
+                left: TestValue::String("foobar".to_string()),
+                operator: "-".to_string(),
+                right: TestValue::String("barfoo".to_string()),
+            },
+            Test {
+                input: "foobar * barfoo;".to_string(),
+                left: TestValue::String("foobar".to_string()),
+                operator: "*".to_string(),
+                right: TestValue::String("barfoo".to_string()),
+            },
+            Test {
+                input: "foobar / barfoo;".to_string(),
+                left: TestValue::String("foobar".to_string()),
+                operator: "/".to_string(),
+                right: TestValue::String("barfoo".to_string()),
+            },
+            Test {
+                input: "foobar > barfoo;".to_string(),
+                left: TestValue::String("foobar".to_string()),
+                operator: ">".to_string(),
+                right: TestValue::String("barfoo".to_string()),
+            },
+            Test {
+                input: "foobar < barfoo;".to_string(),
+                left: TestValue::String("foobar".to_string()),
+                operator: "<".to_string(),
+                right: TestValue::String("barfoo".to_string()),
+            },
+            Test {
+                input: "foobar == barfoo;".to_string(),
+                left: TestValue::String("foobar".to_string()),
+                operator: "==".to_string(),
+                right: TestValue::String("barfoo".to_string()),
+            },
+            Test {
+                input: "foobar != barfoo;".to_string(),
+                left: TestValue::String("foobar".to_string()),
+                operator: "!=".to_string(),
+                right: TestValue::String("barfoo".to_string()),
+            },
+            // TODO(alvaro): Uncomment when we implement boolean
+            // Test {
+            //     input: "true == true".to_string(),
+            //     left: TestValue::Bool(true),
+            //     operator: "==".to_string(),
+            //     right: TestValue::Bool(true),
+            // },
+            // Test {
+            //     input: "true != false".to_string(),
+            //     left: TestValue::Bool(true),
+            //     operator: "!=".to_string(),
+            //     right: TestValue::Bool(false),
+            // },
+            // Test {
+            //     input: "false == false".to_string(),
+            //     left: TestValue::Bool(false),
+            //     operator: "==".to_string(),
+            //     right: TestValue::Bool(false),
+            // },
         ];
 
         for test in tests {
@@ -537,15 +674,10 @@ return 993322;"
 
             assert_eq!(program.statements.len(), 1);
             let expr = &program.statements[0];
-            assert!(matches!(expr, Statement::Expression(Expression::Infix(..))));
-
-            let Statement::Expression(Expression::Infix(expr)) = expr else {
+            let Statement::Expression(expr) = expr else {
                 unreachable!()
             };
-
-            check_integer_literal(&expr.left, test.left_value);
-            assert_eq!(expr.operator, test.operator);
-            check_integer_literal(&expr.right, test.right_value);
+            check_infix_expression(expr, test.left, &test.operator, test.right);
         }
     }
 
