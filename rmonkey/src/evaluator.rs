@@ -49,7 +49,11 @@ impl Eval for Expression {
                     (Object::Integer(left), Object::Integer(right)) => {
                         eval_integer_infix_expression(&expr.operator, left, right)
                     }
-                    _ => todo!(),
+                    (left, right) => match expr.operator.as_ref() {
+                        "==" => Object::Boolean(left == right),
+                        "!=" => Object::Boolean(left != right),
+                        op => todo!("other infix operators: {}", op),
+                    },
                 }
             }
             expr => todo!("{:?}", expr),
@@ -75,6 +79,10 @@ fn eval_integer_infix_expression(operator: &str, left: i64, right: i64) -> Objec
         "-" => Object::Integer(left - right),
         "*" => Object::Integer(left * right),
         "/" => Object::Integer(left / right),
+        "<" => Object::Boolean(left < right),
+        ">" => Object::Boolean(left > right),
+        "==" => Object::Boolean(left == right),
+        "!=" => Object::Boolean(left != right),
         _ => unreachable!(),
     }
 }
@@ -197,6 +205,74 @@ mod tests {
             Test {
                 input: "false".to_string(),
                 expected: false,
+            },
+            Test {
+                input: "1 < 2".to_string(),
+                expected: true,
+            },
+            Test {
+                input: "1 > 2".to_string(),
+                expected: false,
+            },
+            Test {
+                input: "1 < 1".to_string(),
+                expected: false,
+            },
+            Test {
+                input: "1 > 1".to_string(),
+                expected: false,
+            },
+            Test {
+                input: "1 == 1".to_string(),
+                expected: true,
+            },
+            Test {
+                input: "1 != 1".to_string(),
+                expected: false,
+            },
+            Test {
+                input: "1 == 2".to_string(),
+                expected: false,
+            },
+            Test {
+                input: "1 != 2".to_string(),
+                expected: true,
+            },
+            Test {
+                input: "true == true".to_string(),
+                expected: true,
+            },
+            Test {
+                input: "false == false".to_string(),
+                expected: true,
+            },
+            Test {
+                input: "true == false".to_string(),
+                expected: false,
+            },
+            Test {
+                input: "true != false".to_string(),
+                expected: true,
+            },
+            Test {
+                input: "false != true".to_string(),
+                expected: true,
+            },
+            Test {
+                input: "(1 < 2) == true".to_string(),
+                expected: true,
+            },
+            Test {
+                input: "(1 < 2) == false".to_string(),
+                expected: false,
+            },
+            Test {
+                input: "(1 > 2) == true".to_string(),
+                expected: false,
+            },
+            Test {
+                input: "(1 > 2) == false".to_string(),
+                expected: true,
             },
         ];
 
