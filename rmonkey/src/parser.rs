@@ -173,6 +173,7 @@ impl Parser {
             TokenKind::True => self.parse_boolean_literal(),
             TokenKind::False => self.parse_boolean_literal(),
             TokenKind::LParen => self.parse_grouped_expression(),
+            TokenKind::If => self.parse_if_expression(),
 
             kind => Err(format!("unimplemented prefix ({:?})", kind)),
         };
@@ -273,6 +274,66 @@ impl Parser {
             return Err("expected a ')' when parsing a grouped expression".to_string());
         }
         Ok(expr)
+    }
+
+    fn parse_if_expression(&mut self) -> Result<ast::Expression, String> {
+        let token = self.current.clone();
+
+        if !self.expect_peek(TokenKind::LParen) {
+            return Err("expected a '(' when parsing an if expression".to_string());
+        }
+
+        self.next_token();
+        let condition = self
+            .parse_expression(Precedence::Lowest)
+            .ok_or("failed to parse condition expression")?;
+
+        if !self.expect_peek(TokenKind::RParen) {
+            return Err("expected a ')' when parsing an if expression".to_string());
+        }
+
+        if !self.expect_peek(TokenKind::LBrace) {
+            return Err("expected a '{' when parsing an if expression".to_string());
+        }
+
+        let consequence = self.parse_block_statement();
+
+        let alternative = if self.peek_is(TokenKind::Else) {
+            // Parse alternative
+            self.next_token();
+            if !self.expect_peek(TokenKind::LBrace) {
+                return Err("expected a '{' when parsing an else block".to_string());
+            }
+            Some(Rc::new(self.parse_block_statement()))
+        } else {
+            None
+        };
+
+        let if_expr = ast::Expression::If(ast::IfExpression::new(
+            token,
+            Rc::new(condition),
+            Rc::new(consequence),
+            alternative,
+        ));
+
+        Ok(if_expr)
+    }
+
+    fn parse_block_statement(&mut self) -> ast::Statement {
+        let token = self.current.clone();
+        let mut statements = Vec::new();
+
+        self.next_token();
+
+        while !self.current_is(TokenKind::RBrace) && !self.current_is(TokenKind::Eof) {
+            let stmt = self.parse_statement();
+            if let Some(stmt) = stmt {
+                statements.push(stmt);
+            }
+            self.next_token();
+        }
+
+        ast::Statement::Block(ast::Block::new(token, statements))
     }
 
     fn current_is(&self, kind: TokenKind) -> bool {
@@ -826,6 +887,97 @@ mod tests {
 
             let actual = format!("{}", program);
             assert_eq!(actual, test.expected);
+        }
+    }
+
+    #[test]
+    fn test_if_expression() {
+        let input = "if (x < y) { x }".to_string();
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+        check_parser_errors(&mut parser);
+
+        assert_eq!(program.statements.len(), 1);
+        let stmt = &program.statements[0];
+        assert!(matches!(stmt, Statement::Expression(..)));
+
+        let Statement::Expression(Expression::If(if_expr)) = stmt else {
+            unreachable!()
+        };
+
+        check_infix_expression(
+            &if_expr.condition,
+            TestValue::String("x".to_string()),
+            "<",
+            TestValue::String("y".to_string()),
+        );
+
+        // Check the consequence
+        let Statement::Block(cons_block) = &*if_expr.consequence else {
+            unreachable!()
+        };
+
+        assert_eq!(cons_block.statements.len(), 1);
+        let consequence = &cons_block.statements[0];
+        let Statement::Expression(expr) = consequence else {
+            unreachable!()
+        };
+        check_identifier(expr, "x");
+
+        // Check the alternative
+        assert!(if_expr.alternative.is_none());
+    }
+
+    #[test]
+    fn test_if_else_expression() {
+        let input = "if (x < y) { x } else { y }".to_string();
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+        check_parser_errors(&mut parser);
+
+        assert_eq!(program.statements.len(), 1);
+        let stmt = &program.statements[0];
+        assert!(matches!(stmt, Statement::Expression(..)));
+
+        let Statement::Expression(Expression::If(if_expr)) = stmt else {
+            unreachable!()
+        };
+
+        check_infix_expression(
+            &if_expr.condition,
+            TestValue::String("x".to_string()),
+            "<",
+            TestValue::String("y".to_string()),
+        );
+
+        // Check the consequence
+        let Statement::Block(cons_block) = &*if_expr.consequence else {
+            unreachable!()
+        };
+
+        assert_eq!(cons_block.statements.len(), 1);
+        let consequence = &cons_block.statements[0];
+        let Statement::Expression(expr) = consequence else {
+            unreachable!()
+        };
+        check_identifier(expr, "x");
+
+        // Check the alternative
+        match &if_expr.alternative {
+            None => panic!("no alternative found"),
+            Some(block) => match &**block {
+                Statement::Block(alt_block) => {
+                    assert_eq!(alt_block.statements.len(), 1);
+                    let alternative = &alt_block.statements[0];
+                    let Statement::Expression(expr) = alternative else {
+                        unreachable!()
+                    };
+                    check_identifier(expr, "y");
+                }
+                _ => unreachable!(),
+            },
         }
     }
 }

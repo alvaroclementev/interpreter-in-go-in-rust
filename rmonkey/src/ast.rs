@@ -16,6 +16,7 @@ pub enum Expression {
     BooleanLiteral(BooleanLiteral),
     Prefix(PrefixExpression),
     Infix(InfixExpression),
+    If(IfExpression),
 }
 
 impl Node for Expression {
@@ -27,6 +28,7 @@ impl Node for Expression {
             Expression::BooleanLiteral(expr) => expr.token.literal.as_ref(),
             Expression::Prefix(expr) => expr.token.literal.as_ref(),
             Expression::Infix(expr) => expr.token.literal.as_ref(),
+            Expression::If(expr) => expr.token.literal.as_ref(),
         }
     }
 }
@@ -40,6 +42,7 @@ impl Display for Expression {
             Expression::BooleanLiteral(expr) => expr.fmt(f),
             Expression::Prefix(expr) => expr.fmt(f),
             Expression::Infix(expr) => expr.fmt(f),
+            Expression::If(expr) => expr.fmt(f),
         }
     }
 }
@@ -187,10 +190,53 @@ impl Display for InfixExpression {
 }
 
 #[derive(Debug, Clone)]
+pub struct IfExpression {
+    pub token: Token,
+    pub condition: Rc<Expression>,
+    pub consequence: Rc<Statement>,
+    pub alternative: Option<Rc<Statement>>,
+}
+
+impl IfExpression {
+    pub fn new(
+        token: Token,
+        condition: Rc<Expression>,
+        consequence: Rc<Statement>,
+        alternative: Option<Rc<Statement>>,
+    ) -> Self {
+        Self {
+            token,
+            condition,
+            consequence,
+            alternative,
+        }
+    }
+}
+
+impl Node for IfExpression {
+    fn token_literal(&self) -> &str {
+        self.token.literal.as_ref()
+    }
+}
+
+impl Display for IfExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "if {} {}", self.condition, self.consequence)?;
+        match &self.alternative {
+            None => Ok(()),
+            Some(stmt) => write!(f, " else {}", stmt),
+        }
+    }
+}
+
+// ----- Statements -----
+
+#[derive(Debug, Clone)]
 pub enum Statement {
     Let(Let),
     Return(Return),
     Expression(Expression),
+    Block(Block),
 }
 
 impl Node for Statement {
@@ -199,6 +245,7 @@ impl Node for Statement {
             Statement::Let(stmt) => stmt.token_literal(),
             Statement::Return(stmt) => stmt.token_literal(),
             Statement::Expression(stmt) => stmt.token_literal(),
+            Statement::Block(stmt) => stmt.token_literal(),
         }
     }
 }
@@ -209,6 +256,7 @@ impl Display for Statement {
             Statement::Let(stmt) => stmt.fmt(f),
             Statement::Return(stmt) => stmt.fmt(f),
             Statement::Expression(stmt) => stmt.fmt(f),
+            Statement::Block(stmt) => stmt.fmt(f),
         }
     }
 }
@@ -271,6 +319,35 @@ impl Display for Return {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Block {
+    pub token: Token,
+    pub statements: Vec<Statement>,
+}
+
+impl Block {
+    pub fn new(token: Token, statements: Vec<Statement>) -> Self {
+        Self { token, statements }
+    }
+}
+
+impl Node for Block {
+    fn token_literal(&self) -> &str {
+        self.token.literal.as_ref()
+    }
+}
+
+impl Display for Block {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.statements
+            .iter()
+            .try_for_each(|s| write!(f, "{}", s))?;
+        Ok(())
+    }
+}
+
+// ----- Program -----
+
 #[derive(Debug)]
 pub struct Program {
     pub statements: Vec<Statement>,
@@ -294,10 +371,9 @@ impl Node for Program {
 
 impl Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.statements.iter().try_for_each(|s| {
-            println!("Displaying statement: {:?}", &s);
-            write!(f, "{}", s)
-        })?;
+        self.statements
+            .iter()
+            .try_for_each(|s| write!(f, "{}", s))?;
         Ok(())
     }
 }
