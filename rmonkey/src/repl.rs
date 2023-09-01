@@ -1,6 +1,6 @@
 use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
 
-use crate::{lexer::Lexer, parser::Parser};
+use crate::{lexer::Lexer, parser::Parser, evaluator};
 
 const PROMPT: &str = ">> ";
 const MONKEY_FACE: &str = r#"            __,__
@@ -24,6 +24,7 @@ pub fn start(input: impl Read, output: impl Write) -> io::Result<()> {
         write!(bufwrite, "{}", PROMPT)?;
         bufwrite.flush().unwrap();
 
+        // Read
         let mut buf = String::new();
         bufread.read_line(&mut buf)?;
         // Strip the newline at the end
@@ -34,6 +35,7 @@ pub fn start(input: impl Read, output: impl Write) -> io::Result<()> {
             break;
         }
 
+        // Parse
         let lexer = Lexer::new(buf);
         let mut parser = Parser::new(lexer);
 
@@ -42,7 +44,12 @@ pub fn start(input: impl Read, output: impl Write) -> io::Result<()> {
             print_parser_errors(&mut bufwrite, &parser);
             continue;
         }
-        writeln!(bufwrite, "{}", program).unwrap();
+
+        // Eval
+        let result = evaluator::eval(&program);
+
+        // Print
+        writeln!(bufwrite, "{}", result).unwrap();
     }
     Ok(())
 }
