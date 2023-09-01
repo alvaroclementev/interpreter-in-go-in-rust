@@ -174,6 +174,7 @@ impl Parser {
             TokenKind::False => self.parse_boolean_literal(),
             TokenKind::LParen => self.parse_grouped_expression(),
             TokenKind::If => self.parse_if_expression(),
+            TokenKind::Function => self.parse_function_literal(),
 
             kind => Err(format!("unimplemented prefix ({:?})", kind)),
         };
@@ -319,6 +320,28 @@ impl Parser {
         Ok(if_expr)
     }
 
+    fn parse_function_literal(&mut self) -> Result<ast::Expression, String> {
+        let token = self.current.clone();
+
+        if !self.expect_peek(TokenKind::LParen) {
+            return Err("expected '(' when parsing an function literal".to_string());
+        }
+
+        let parameters = self.parse_function_parameters()?;
+
+        if !self.expect_peek(TokenKind::LBrace) {
+            return Err("expected a '{' when parsing function literal".to_string());
+        }
+
+        let ast::Statement::Block(body) = self.parse_block_statement() else {
+            unreachable!()
+        };
+
+        let fn_expr = ast::Expression::Function(ast::FunctionLiteral::new(token, parameters, body));
+
+        Ok(fn_expr)
+    }
+
     fn parse_block_statement(&mut self) -> ast::Statement {
         let token = self.current.clone();
         let mut statements = Vec::new();
@@ -334,6 +357,34 @@ impl Parser {
         }
 
         ast::Statement::Block(ast::Block::new(token, statements))
+    }
+
+    fn parse_function_parameters(&mut self) -> Result<Vec<ast::Identifier>, String> {
+        if self.peek_is(TokenKind::RParen) {
+            // There are no arguments
+            self.next_token();
+            return Ok(Vec::new());
+        }
+
+        self.next_token();
+
+        let mut parameters = Vec::new();
+
+        let ident = ast::Identifier::new(self.current.clone(), self.current.literal.clone());
+        parameters.push(ident);
+
+        while self.peek_is(TokenKind::Comma) {
+            self.next_token();
+            self.next_token();
+
+            let ident = ast::Identifier::new(self.current.clone(), self.current.literal.clone());
+            parameters.push(ident);
+        }
+
+        if !self.expect_peek(TokenKind::RParen) {
+            return Err("expected a ')' when parsing function parameters".to_string());
+        }
+        Ok(parameters)
     }
 
     fn current_is(&self, kind: TokenKind) -> bool {
@@ -978,6 +1029,100 @@ mod tests {
                 }
                 _ => unreachable!(),
             },
+        }
+    }
+
+    #[test]
+    fn test_function_literal_parsing() {
+        let input = "fn(x, y) { x + y; }".to_string();
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+        check_parser_errors(&mut parser);
+
+        assert_eq!(program.statements.len(), 1);
+        let stmt = &program.statements[0];
+        assert!(matches!(
+            stmt,
+            Statement::Expression(Expression::Function(..))
+        ));
+
+        let Statement::Expression(Expression::Function(fn_lit)) = stmt else {
+            unreachable!()
+        };
+
+        assert_eq!(fn_lit.parameters.len(), 2);
+
+        check_literal_expression(
+            &Expression::Identifier(fn_lit.parameters[0].clone()),
+            TestValue::String("x".to_string()),
+        );
+        check_literal_expression(
+            &Expression::Identifier(fn_lit.parameters[1].clone()),
+            TestValue::String("y".to_string()),
+        );
+
+        assert_eq!(fn_lit.body.statements.len(), 1);
+        let Statement::Expression(body_expr) = &fn_lit.body.statements[0] else {
+            unreachable!()
+        };
+        check_infix_expression(
+            body_expr,
+            TestValue::String("x".to_string()),
+            "+",
+            TestValue::String("y".to_string()),
+        );
+    }
+
+    #[test]
+    fn test_function_parameter_parsing() {
+        struct Test {
+            input: String,
+            expected: Vec<String>,
+        }
+        let tests = vec![
+            Test {
+                input: "fn() {};".to_string(),
+                expected: vec![],
+            },
+            Test {
+                input: "fn(x) {};".to_string(),
+                expected: vec!["x".to_string()],
+            },
+            Test {
+                input: "fn(x, y, z) {};".to_string(),
+                expected: vec!["x".to_string(), "y".to_string(), "z".to_string()],
+            },
+        ];
+
+        for test in tests {
+            let lexer = Lexer::new(test.input);
+            let mut parser = Parser::new(lexer);
+            let program = parser.parse();
+            check_parser_errors(&mut parser);
+
+            assert_eq!(program.statements.len(), 1);
+
+            let Statement::Expression(expr) = &program.statements[0] else {
+                unreachable!()
+            };
+
+            let Expression::Function(fn_lit) = expr else {
+                unreachable!()
+            };
+
+            assert_eq!(fn_lit.parameters.len(), test.expected.len());
+            for (param, expected) in fn_lit
+                .parameters
+                .iter()
+                .cloned()
+                .zip(test.expected.iter().cloned())
+            {
+                check_literal_expression(
+                    &Expression::Identifier(param),
+                    TestValue::String(expected),
+                );
+            }
         }
     }
 }

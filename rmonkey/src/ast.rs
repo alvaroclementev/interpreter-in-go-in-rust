@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use itertools::Itertools;
 use std::{fmt::Display, rc::Rc};
 
 use crate::token::Token;
@@ -17,6 +18,7 @@ pub enum Expression {
     Prefix(PrefixExpression),
     Infix(InfixExpression),
     If(IfExpression),
+    Function(FunctionLiteral),
 }
 
 impl Node for Expression {
@@ -29,6 +31,7 @@ impl Node for Expression {
             Expression::Prefix(expr) => expr.token.literal.as_ref(),
             Expression::Infix(expr) => expr.token.literal.as_ref(),
             Expression::If(expr) => expr.token.literal.as_ref(),
+            Expression::Function(expr) => expr.token.literal.as_ref(),
         }
     }
 }
@@ -43,6 +46,7 @@ impl Display for Expression {
             Expression::Prefix(expr) => expr.fmt(f),
             Expression::Infix(expr) => expr.fmt(f),
             Expression::If(expr) => expr.fmt(f),
+            Expression::Function(expr) => expr.fmt(f),
         }
     }
 }
@@ -226,6 +230,37 @@ impl Display for IfExpression {
             None => Ok(()),
             Some(stmt) => write!(f, " else {}", stmt),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionLiteral {
+    pub token: Token,
+    pub parameters: Vec<Identifier>,
+    pub body: Block,
+}
+
+impl FunctionLiteral {
+    pub fn new(token: Token, parameters: Vec<Identifier>, body: Block) -> Self {
+        Self {
+            token,
+            parameters,
+            body,
+        }
+    }
+}
+
+impl Node for FunctionLiteral {
+    fn token_literal(&self) -> &str {
+        self.token.literal.as_ref()
+    }
+}
+
+impl Display for FunctionLiteral {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let args = self.parameters.iter().map(|p| format!("{}", p)).join(", ");
+        write!(f, "{} ({}) {}", self.token_literal(), args, self.body)?;
+        Ok(())
     }
 }
 
