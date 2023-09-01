@@ -2,7 +2,9 @@ use std::io;
 
 mod ast;
 mod lexer;
+mod object;
 mod parser;
+mod evaluator;
 mod repl;
 mod token;
 
