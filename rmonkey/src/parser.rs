@@ -30,6 +30,7 @@ impl Precedence {
             TokenKind::Minus => Precedence::Sum,
             TokenKind::Slash => Precedence::Product,
             TokenKind::Asterisk => Precedence::Product,
+            TokenKind::LParen => Precedence::Call,
             _ => Precedence::Lowest,
         }
     }
@@ -202,6 +203,7 @@ impl Parser {
             TokenKind::NotEq => self.parse_infix_expression(left),
             TokenKind::Lt => self.parse_infix_expression(left),
             TokenKind::Gt => self.parse_infix_expression(left),
+            TokenKind::LParen => self.parse_call_expression(left),
             kind => Err(format!("unimplemented infix ({:?})", kind)),
         };
         // Report the error and return
@@ -385,6 +387,50 @@ impl Parser {
             return Err("expected a ')' when parsing function parameters".to_string());
         }
         Ok(parameters)
+    }
+
+    fn parse_call_expression(
+        &mut self,
+        function: ast::Expression,
+    ) -> Result<ast::Expression, String> {
+        let token = self.current.clone();
+        let arguments = self.parse_call_arguments()?;
+
+        Ok(ast::Expression::Call(ast::CallExpression::new(
+            token,
+            Rc::new(function),
+            arguments,
+        )))
+    }
+
+    fn parse_call_arguments(&mut self) -> Result<Vec<ast::Expression>, String> {
+        let mut arguments = Vec::new();
+        if self.peek_is(TokenKind::RParen) {
+            // There are no arguments
+            self.next_token();
+            return Ok(arguments);
+        }
+
+        self.next_token();
+        let expr = self
+            .parse_expression(Precedence::Lowest)
+            .ok_or("failed to parse function argument")?;
+        arguments.push(expr);
+
+        while self.peek_is(TokenKind::Comma) {
+            self.next_token();
+            self.next_token();
+
+            let expr = self
+                .parse_expression(Precedence::Lowest)
+                .ok_or("failed to parse function argument")?;
+            arguments.push(expr);
+        }
+
+        if !self.expect_peek(TokenKind::RParen) {
+            return Err("expected a ')' when parsing function arguments".to_string());
+        }
+        Ok(arguments)
     }
 
     fn current_is(&self, kind: TokenKind) -> bool {
@@ -928,6 +974,18 @@ mod tests {
                 input: "!(true == true)".to_string(),
                 expected: "(!(true == true))".to_string(),
             },
+            Test {
+                input: "a + add(b * c) + d".to_string(),
+                expected: "((a + add((b * c))) + d)".to_string(),
+            },
+            Test {
+                input: "add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))".to_string(),
+                expected: "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))".to_string(),
+            },
+            Test {
+                input: "add(a + b + c * d / f + g)".to_string(),
+                expected: "add((((a + b) + ((c * d) / f)) + g))".to_string(),
+            },
         ];
 
         for test in tests {
@@ -1122,6 +1180,90 @@ mod tests {
                     &Expression::Identifier(param),
                     TestValue::String(expected),
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn test_call_expression_parsing() {
+        let input = "add(1, 2 * 3, 4 + 5)".to_string();
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+        check_parser_errors(&mut parser);
+
+        assert_eq!(program.statements.len(), 1);
+        let stmt = &program.statements[0];
+        assert!(matches!(stmt, Statement::Expression(Expression::Call(..))));
+
+        let Statement::Expression(Expression::Call(call_expr)) = stmt else {
+            unreachable!()
+        };
+
+        check_identifier(&call_expr.function, "add");
+
+        assert_eq!(call_expr.arguments.len(), 3);
+        check_literal_expression(&call_expr.arguments[0], TestValue::Int(1));
+        check_infix_expression(
+            &call_expr.arguments[1],
+            TestValue::Int(2),
+            "*",
+            TestValue::Int(3),
+        );
+        check_infix_expression(
+            &call_expr.arguments[2],
+            TestValue::Int(4),
+            "+",
+            TestValue::Int(5),
+        );
+    }
+
+    #[test]
+    fn test_call_expression_parameter_parsing() {
+        struct Test {
+            input: String,
+            expected_ident: String,
+            expected_args: Vec<String>,
+        }
+        let tests = vec![
+            Test {
+                input: "add()".to_string(),
+                expected_ident: "add".to_string(),
+                expected_args: vec![],
+            },
+            Test {
+                input: "add(1)".to_string(),
+                expected_ident: "add".to_string(),
+                expected_args: vec!["1".to_string()],
+            },
+            Test {
+                input: "add(1, 2 * 3, 4 + 5)".to_string(),
+                expected_ident: "add".to_string(),
+                expected_args: vec![
+                    "1".to_string(),
+                    "(2 * 3)".to_string(),
+                    "(4 + 5)".to_string(),
+                ],
+            },
+        ];
+
+        for test in tests {
+            let lexer = Lexer::new(test.input);
+            let mut parser = Parser::new(lexer);
+            let program = parser.parse();
+            check_parser_errors(&mut parser);
+
+            assert_eq!(program.statements.len(), 1);
+
+            let Statement::Expression(Expression::Call(call)) = &program.statements[0] else {
+                unreachable!()
+            };
+
+            check_identifier(&call.function, test.expected_ident);
+            assert_eq!(call.arguments.len(), test.expected_args.len());
+
+            for (arg, expected) in call.arguments.iter().zip(test.expected_args.iter()) {
+                assert_eq!(&format!("{}", arg), expected);
             }
         }
     }

@@ -19,6 +19,7 @@ pub enum Expression {
     Infix(InfixExpression),
     If(IfExpression),
     Function(FunctionLiteral),
+    Call(CallExpression),
 }
 
 impl Node for Expression {
@@ -32,6 +33,7 @@ impl Node for Expression {
             Expression::Infix(expr) => expr.token.literal.as_ref(),
             Expression::If(expr) => expr.token.literal.as_ref(),
             Expression::Function(expr) => expr.token.literal.as_ref(),
+            Expression::Call(expr) => expr.token.literal.as_ref(),
         }
     }
 }
@@ -47,6 +49,7 @@ impl Display for Expression {
             Expression::Infix(expr) => expr.fmt(f),
             Expression::If(expr) => expr.fmt(f),
             Expression::Function(expr) => expr.fmt(f),
+            Expression::Call(expr) => expr.fmt(f),
         }
     }
 }
@@ -260,6 +263,38 @@ impl Display for FunctionLiteral {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let args = self.parameters.iter().map(|p| format!("{}", p)).join(", ");
         write!(f, "{} ({}) {}", self.token_literal(), args, self.body)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CallExpression {
+    pub token: Token,
+    // Identifier or FunctionLiteral
+    pub function: Rc<Expression>,
+    pub arguments: Vec<Expression>,
+}
+
+impl CallExpression {
+    pub fn new(token: Token, function: Rc<Expression>, arguments: Vec<Expression>) -> Self {
+        Self {
+            token,
+            function,
+            arguments,
+        }
+    }
+}
+
+impl Node for CallExpression {
+    fn token_literal(&self) -> &str {
+        self.token.literal.as_ref()
+    }
+}
+
+impl Display for CallExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let args = self.arguments.iter().map(|a| format!("{}", a)).join(", ");
+        write!(f, "{}({})", self.function, args)?;
         Ok(())
     }
 }
