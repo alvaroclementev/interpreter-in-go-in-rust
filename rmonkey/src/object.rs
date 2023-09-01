@@ -19,3 +19,13 @@ impl Display for Object {
         }
     }
 }
+
+impl Object {
+    pub fn as_boolean(&self) -> Object {
+        match self {
+            Object::Null => Object::Boolean(false),
+            Object::Boolean(val) => Object::Boolean(*val),
+            Object::Integer(val) => Object::Boolean(*val != 0),
+        }
+    }
+}
