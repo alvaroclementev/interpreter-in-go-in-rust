@@ -102,19 +102,16 @@ impl Parser {
             return None;
         }
 
-        // TODO(alvaro): We should parse the real value here
-        loop {
-            // Skip until the semicolon
-            if self.current_is(TokenKind::Semicolon) {
-                break;
-            }
-            self.next_token()
+        self.next_token();
+        let value = self.parse_expression(Precedence::Lowest)?;
+
+        // Skip optional semicolon
+        if self.peek_is(TokenKind::Semicolon) {
+            self.next_token();
         }
 
         Some(ast::Statement::Let(ast::Let::new(
-            let_token,
-            identifier,
-            ast::Expression::Missing,
+            let_token, identifier, value,
         )))
     }
 
@@ -123,18 +120,17 @@ impl Parser {
 
         self.next_token();
 
-        // TODO(alvaro): We should parse the real value here
-        loop {
-            // Skip until the semicolon
-            if self.current_is(TokenKind::Semicolon) {
-                break;
-            }
+        // TODO(alvaro): Better error reporting
+        let return_value = self.parse_expression(Precedence::Lowest)?;
+
+        // Skip optional semicolon
+        if self.peek_is(TokenKind::Semicolon) {
             self.next_token()
         }
 
         Some(ast::Statement::Return(ast::Return::new(
             ret_token,
-            ast::Expression::Missing,
+            return_value,
         )))
     }
 
@@ -593,11 +589,10 @@ mod tests {
 
             let stmt = &program.statements[0];
             check_let_statement(stmt, test.ident);
-            let Statement::Let(_let_stmt) = stmt else {
+            let Statement::Let(let_stmt) = stmt else {
                 unreachable!()
             };
-            // FIXME(alvaro): Implement parsing the value of the let expression
-            // check_literal_expression(&let_stmt.value, test.value);
+            check_literal_expression(&let_stmt.value, test.value);
         }
     }
 
@@ -635,8 +630,7 @@ mod tests {
             match stmt {
                 Statement::Return(ret_stmt) => {
                     assert_eq!(ret_stmt.token_literal(), "return");
-                    // FIXME(alvaro): Implement parsing the value of the return
-                    // check_literal_expression(&ret_stmt.value, test.value);
+                    check_literal_expression(&ret_stmt.value, test.value);
                 }
                 stmt => panic!("stmt is not a Return: {:?}", stmt),
             }
