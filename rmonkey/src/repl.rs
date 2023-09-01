@@ -1,8 +1,20 @@
 use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
 
-use crate::{lexer::Lexer, token::TokenKind};
+use crate::{lexer::Lexer, parser::Parser};
 
 const PROMPT: &str = ">> ";
+const MONKEY_FACE: &str = r#"            __,__
+   .--.  .-"     "-.  .--.
+  / .. \/  .-. .-.  \/ .. \
+ | |  '|  /   Y   \  |'  | |
+ | \   \  \ 0 | 0 /  /   / |
+  \ '- ,\.-"""""""-./, -' /
+   ''-' /_   ^ ^   _\ '-''
+       |  \._   _./  |
+       \   \ '~' /   /
+        '._ '-=-' _.'
+           '-----'
+"#;
 
 pub fn start(input: impl Read, output: impl Write) -> io::Result<()> {
     let mut bufread = BufReader::new(input);
@@ -22,15 +34,26 @@ pub fn start(input: impl Read, output: impl Write) -> io::Result<()> {
             break;
         }
 
-        let mut lexer = Lexer::new(buf);
+        let lexer = Lexer::new(buf);
+        let mut parser = Parser::new(lexer);
 
-        loop {
-            let token = lexer.next_token();
-            match token.kind {
-                TokenKind::Eof => break,
-                _ => writeln!(bufwrite, "{:?}", token)?,
-            }
+        let program = parser.parse();
+        if !parser.errors.is_empty() {
+            print_parser_errors(&mut bufwrite, &parser);
+            continue;
         }
+        writeln!(bufwrite, "{}", program).unwrap();
     }
     Ok(())
+}
+
+fn print_parser_errors(output: &mut impl Write, parser: &Parser) {
+    writeln!(output, "{}", MONKEY_FACE).unwrap();
+    writeln!(output, "Woops! We ran into some monkey business here!").unwrap();
+    writeln!(output, " parser errors:").unwrap();
+    parser
+        .errors
+        .iter()
+        .try_for_each(|e| writeln!(output, "\t{}", e))
+        .expect("printing parser errors to work")
 }
