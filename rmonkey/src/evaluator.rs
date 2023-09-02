@@ -1,5 +1,7 @@
 //! Contains the main `eval` function
 
+use std::rc::Rc;
+
 use crate::ast::{Expression, Program, Statement};
 use crate::object::Object;
 
@@ -20,10 +22,17 @@ impl Eval for Statement {
                 let mut result = Object::Null;
 
                 for stmt in block.statements.iter() {
-                    result = stmt.eval();
+                    match stmt.eval() {
+                        // If the block ended due to a return value, we do not
+                        // unwrap it and send it up the stack to signal to nested
+                        // blocks that they should return as well
+                        retval @ Object::Return(..) => return retval,
+                        new_result => result = new_result,
+                    }
                 }
                 result
             }
+            Statement::Return(expr) => Object::Return(Rc::new(expr.value.eval())),
             stmt => todo!("{:?}", stmt),
         }
     }
@@ -84,7 +93,10 @@ impl Eval for Program {
         let mut result = Object::Null;
 
         for stmt in self.statements.iter() {
-            result = stmt.eval();
+            match stmt.eval() {
+                Object::Return(value) => return (*value).clone(),
+                obj => result = obj,
+            }
         }
 
         result
@@ -381,6 +393,42 @@ mod tests {
         for test in tests {
             let evaluated = eval_for_test(&test.input);
             assert_eq!(&evaluated, &test.expected, "{}", &test.input);
+        }
+    }
+
+    #[test]
+    fn test_return_statement() {
+        struct Test {
+            input: String,
+            expected: i64,
+        }
+
+        let tests = [
+            Test {
+                input: "return 10;".to_string(),
+                expected: 10,
+            },
+            Test {
+                input: "return 10; 9;".to_string(),
+                expected: 10,
+            },
+            Test {
+                input: "return 2 * 5; 9;".to_string(),
+                expected: 10,
+            },
+            Test {
+                input: "9; return 2 * 5; 9;".to_string(),
+                expected: 10,
+            },
+            Test {
+                input: "if (10 > 1) { if (10 > 1) { return 10; } return 1; }".to_string(),
+                expected: 10,
+            },
+        ];
+
+        for test in tests {
+            let evaluated = eval_for_test(&test.input);
+            check_integer_object(&evaluated, test.expected, &test.input);
         }
     }
 }

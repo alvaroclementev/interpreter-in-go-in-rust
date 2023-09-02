@@ -1,13 +1,14 @@
 //! The internal representation of values inside the rmonkey interpreter
 #![allow(dead_code)]
 
-use std::fmt::Display;
+use std::{fmt::Display, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Object {
     Null,
     Boolean(bool),
     Integer(i64),
+    Return(Rc<Object>),
 }
 
 impl Display for Object {
@@ -16,6 +17,7 @@ impl Display for Object {
             Object::Null => write!(f, "null"),
             Object::Boolean(val) => write!(f, "{}", val),
             Object::Integer(val) => write!(f, "{}", val),
+            Object::Return(val) => write!(f, "{}", val),
         }
     }
 }
@@ -26,6 +28,7 @@ impl Object {
             Object::Null => Object::Boolean(false),
             Object::Boolean(val) => Object::Boolean(*val),
             Object::Integer(val) => Object::Boolean(*val != 0),
+            Object::Return(obj) => obj.as_boolean(),
         }
     }
 
