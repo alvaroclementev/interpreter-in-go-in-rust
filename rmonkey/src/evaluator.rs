@@ -16,6 +16,14 @@ impl Eval for Statement {
     fn eval(&self) -> Object {
         match self {
             Statement::Expression(expr) => expr.eval(),
+            Statement::Block(block) => {
+                let mut result = Object::Null;
+
+                for stmt in block.statements.iter() {
+                    result = stmt.eval();
+                }
+                result
+            }
             stmt => todo!("{:?}", stmt),
         }
     }
@@ -54,6 +62,16 @@ impl Eval for Expression {
                         "!=" => Object::Boolean(left != right),
                         op => todo!("other infix operators: {}", op),
                     },
+                }
+            }
+            Expression::If(expr) => {
+                let condition = expr.condition.eval();
+                if condition.is_truthy() {
+                    expr.consequence.eval()
+                } else if let Some(alternative) = &expr.alternative {
+                    alternative.eval()
+                } else {
+                    Object::Null
                 }
             }
             expr => todo!("{:?}", expr),
@@ -319,6 +337,50 @@ mod tests {
         for test in tests {
             let evaluated = eval_for_test(&test.input);
             check_boolean_object(&evaluated, test.expected, &test.input);
+        }
+    }
+
+    #[test]
+    fn test_if_else_expresssions() {
+        struct Test {
+            input: String,
+            expected: Object,
+        }
+
+        let tests = [
+            Test {
+                input: "if (true) { 10 }".to_string(),
+                expected: Object::Integer(10),
+            },
+            Test {
+                input: "if (false) { 10 }".to_string(),
+                expected: Object::Null,
+            },
+            Test {
+                input: "if (1) { 10 }".to_string(),
+                expected: Object::Integer(10),
+            },
+            Test {
+                input: "if (1 < 2) { 10 }".to_string(),
+                expected: Object::Integer(10),
+            },
+            Test {
+                input: "if (1 > 2) { 10 }".to_string(),
+                expected: Object::Null,
+            },
+            Test {
+                input: "if (1 > 2) { 10 } else { 20 }".to_string(),
+                expected: Object::Integer(20),
+            },
+            Test {
+                input: "if (1 < 2) { 10 } else { 20 }".to_string(),
+                expected: Object::Integer(10),
+            },
+        ];
+
+        for test in tests {
+            let evaluated = eval_for_test(&test.input);
+            assert_eq!(&evaluated, &test.expected, "{}", &test.input);
         }
     }
 }

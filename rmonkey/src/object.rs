@@ -28,4 +28,11 @@ impl Object {
             Object::Integer(val) => Object::Boolean(*val != 0),
         }
     }
+
+    pub fn is_truthy(&self) -> bool {
+        let Object::Boolean(val) = self.as_boolean() else {
+            unreachable!()
+        };
+        val
+    }
 }
