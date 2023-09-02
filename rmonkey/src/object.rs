@@ -1,15 +1,19 @@
 //! The internal representation of values inside the rmonkey interpreter
 #![allow(dead_code)]
 
+use itertools::Itertools;
 use std::{fmt::Display, rc::Rc};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+use crate::{ast, evaluator::Environment};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Object {
     Null,
     Boolean(bool),
     Integer(i64),
     Return(Rc<Object>),
     Error(String),
+    Function(Box<Function>),
 }
 
 impl Display for Object {
@@ -23,6 +27,10 @@ impl Display for Object {
                 // TODO(alvaro): Proper displaying of error messages
                 write!(f, "error: {}", msg)
             }
+            Object::Function(fun) => {
+                let params = fun.parameters.iter().map(|p| format!("{}", p)).join(", ");
+                write!(f, "fn ({}) {{\n{}\n}}", params, fun.body)
+            }
         }
     }
 }
@@ -35,6 +43,7 @@ impl Object {
             Object::Integer(val) => Object::Boolean(*val != 0),
             Object::Return(obj) => obj.as_boolean(),
             obj @ Object::Error(..) => obj.clone(),
+            Object::Function(..) => Object::Boolean(true), // Functions are truthy I guess
         }
     }
 
@@ -52,10 +61,32 @@ impl Object {
             Object::Integer(..) => "INTEGER",
             Object::Return(..) => "RETURN_VALUE",
             Object::Error(..) => "ERROR",
+            Object::Function(..) => "FUNCTION",
         }
     }
 
     pub fn is_error(&self) -> bool {
         matches!(self, Object::Error(..))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Function {
+    pub parameters: Vec<ast::Identifier>,
+    pub body: ast::Block,
+    pub environment: Environment,
+}
+
+impl Function {
+    pub fn new(
+        parameters: Vec<ast::Identifier>,
+        body: ast::Block,
+        environment: Environment,
+    ) -> Self {
+        Self {
+            parameters,
+            body,
+            environment,
+        }
     }
 }

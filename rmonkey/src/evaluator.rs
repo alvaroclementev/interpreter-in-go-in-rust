@@ -1,17 +1,19 @@
 //! Contains the main `eval` function
 
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::ast::{Expression, Program, Statement};
-use crate::object::Object;
+use crate::object::{Function, Object};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Environment(HashMap<String, Object>);
 
 impl Environment {
     pub fn new() -> Self {
-        return Environment(HashMap::new());
+        Environment(HashMap::new())
     }
 
     fn get(&self, name: &str) -> Option<&Object> {
@@ -155,6 +157,12 @@ impl Eval for Expression {
                     .cloned()
                     .unwrap_or_else(|| Object::Error(format!("identifier not found: {}", name)))
             }
+            // TODO(alvaro): Too much cloning in here...
+            Expression::Function(expr) => Object::Function(Box::new(Function::new(
+                expr.parameters.clone(),
+                expr.body.clone(),
+                environment.clone(),
+            ))),
             expr => todo!("{:?}", expr),
         }
     }
@@ -598,6 +606,21 @@ mod tests {
             let evaluated = eval_for_test(&test.input);
 
             check_integer_object(&evaluated, test.expected, &test.input);
+        }
+    }
+
+    #[test]
+    fn test_function_object() {
+        let input = "fn(x) { x + 2; }".to_string();
+        let evaluated = eval_for_test(&input);
+        match evaluated {
+            Object::Function(fun) => {
+                assert_eq!(fun.parameters.len(), 1);
+                assert_eq!(fun.parameters[0].to_string(), "x");
+
+                assert_eq!(fun.body.to_string(), "(x + 2)");
+            }
+            obj => panic!("unexpected value, expected Function but got: {:?}", obj),
         }
     }
 }

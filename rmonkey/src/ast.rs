@@ -9,7 +9,7 @@ pub trait Node {
     fn token_literal(&self) -> &str;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expression {
     Missing,
     Identifier(Identifier),
@@ -54,7 +54,7 @@ impl Display for Expression {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Identifier {
     pub token: Token,
     pub value: String,
@@ -79,7 +79,7 @@ impl Display for Identifier {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IntegerLiteral {
     pub token: Token,
     pub value: i64,
@@ -104,7 +104,7 @@ impl Display for IntegerLiteral {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BooleanLiteral {
     pub token: Token,
     pub value: bool,
@@ -129,7 +129,7 @@ impl Display for BooleanLiteral {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PrefixExpression {
     pub token: Token,
     pub operator: String,
@@ -159,7 +159,7 @@ impl Display for PrefixExpression {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InfixExpression {
     pub token: Token,
     pub left: Rc<Expression>,
@@ -196,7 +196,7 @@ impl Display for InfixExpression {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IfExpression {
     pub token: Token,
     pub condition: Rc<Expression>,
@@ -236,7 +236,7 @@ impl Display for IfExpression {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionLiteral {
     pub token: Token,
     pub parameters: Vec<Identifier>,
@@ -267,7 +267,7 @@ impl Display for FunctionLiteral {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallExpression {
     pub token: Token,
     // Identifier or FunctionLiteral
@@ -301,7 +301,7 @@ impl Display for CallExpression {
 
 // ----- Statements -----
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
     Let(Let),
     Return(Return),
@@ -331,7 +331,7 @@ impl Display for Statement {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Let {
     pub token: Token,
     // TODO(alvaro): This should point to the same identifier
@@ -364,7 +364,7 @@ impl Display for Let {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Return {
     pub token: Token,
     pub value: Expression,
@@ -389,7 +389,7 @@ impl Display for Return {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Block {
     pub token: Token,
     pub statements: Vec<Statement>,
