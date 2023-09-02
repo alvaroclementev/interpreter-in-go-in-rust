@@ -9,6 +9,7 @@ pub enum Object {
     Boolean(bool),
     Integer(i64),
     Return(Rc<Object>),
+    Error(String),
 }
 
 impl Display for Object {
@@ -18,6 +19,10 @@ impl Display for Object {
             Object::Boolean(val) => write!(f, "{}", val),
             Object::Integer(val) => write!(f, "{}", val),
             Object::Return(val) => write!(f, "{}", val),
+            Object::Error(msg) => {
+                // TODO(alvaro): Proper displaying of error messages
+                write!(f, "error: {}", msg)
+            }
         }
     }
 }
@@ -29,6 +34,7 @@ impl Object {
             Object::Boolean(val) => Object::Boolean(*val),
             Object::Integer(val) => Object::Boolean(*val != 0),
             Object::Return(obj) => obj.as_boolean(),
+            obj @ Object::Error(..) => obj.clone(),
         }
     }
 
@@ -37,5 +43,19 @@ impl Object {
             unreachable!()
         };
         val
+    }
+
+    pub fn type_str(&self) -> &str {
+        match self {
+            Object::Null => "NULL",
+            Object::Boolean(..) => "BOOLEAN",
+            Object::Integer(..) => "INTEGER",
+            Object::Return(..) => "RETURN_VALUE",
+            Object::Error(..) => "ERROR",
+        }
+    }
+
+    pub fn is_error(&self) -> bool {
+        matches!(self, Object::Error(..))
     }
 }

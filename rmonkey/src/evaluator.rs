@@ -27,12 +27,20 @@ impl Eval for Statement {
                         // unwrap it and send it up the stack to signal to nested
                         // blocks that they should return as well
                         retval @ Object::Return(..) => return retval,
+                        err @ Object::Error(..) => return err,
                         new_result => result = new_result,
                     }
                 }
                 result
             }
-            Statement::Return(expr) => Object::Return(Rc::new(expr.value.eval())),
+            Statement::Return(expr) => {
+                let value = expr.value.eval();
+                if value.is_error() {
+                    value
+                } else {
+                    Object::Return(Rc::new(value))
+                }
+            }
             stmt => todo!("{:?}", stmt),
         }
     }
@@ -45,37 +53,63 @@ impl Eval for Expression {
             Expression::BooleanLiteral(lit) => Object::Boolean(lit.value),
             Expression::Prefix(expr) => {
                 let right = expr.right.eval();
+                if right.is_error() {
+                    return right;
+                }
                 match expr.operator.as_ref() {
                     "!" => match right.as_boolean() {
                         Object::Boolean(val) => Object::Boolean(!val),
                         _ => unreachable!(),
                     },
                     "-" => match right {
-                        // TODO(alvaro): Error handling for invalid operations
                         Object::Integer(val) => Object::Integer(-val),
-                        _ => unreachable!(),
+                        val => Object::Error(format!("unknown operator: -{}", val.type_str())),
                     },
-                    _ => unreachable!(),
+                    op => Object::Error(format!("unknown operator: {}{}", op, right.type_str())),
                 }
             }
             Expression::Infix(expr) => {
                 let left = expr.left.eval();
+                if left.is_error() {
+                    return left;
+                }
                 let right = expr.right.eval();
+                if right.is_error() {
+                    return right;
+                }
 
                 match (left, right) {
                     (Object::Integer(left), Object::Integer(right)) => {
                         eval_integer_infix_expression(&expr.operator, left, right)
                     }
-                    (left, right) => match expr.operator.as_ref() {
-                        "==" => Object::Boolean(left == right),
-                        "!=" => Object::Boolean(left != right),
-                        op => todo!("other infix operators: {}", op),
-                    },
+                    (left, right)
+                        if std::mem::discriminant(&left) == std::mem::discriminant(&right) =>
+                    {
+                        match expr.operator.as_ref() {
+                            "==" => Object::Boolean(left == right),
+                            "!=" => Object::Boolean(left != right),
+                            op => Object::Error(format!(
+                                "unknown operator: {} {} {}",
+                                left.type_str(),
+                                op,
+                                right.type_str()
+                            )),
+                        }
+                    }
+                    // They are of different types
+                    (left, right) => Object::Error(format!(
+                        "type mismatch: {} {} {}",
+                        left.type_str(),
+                        &expr.operator,
+                        right.type_str()
+                    )),
                 }
             }
             Expression::If(expr) => {
                 let condition = expr.condition.eval();
-                if condition.is_truthy() {
+                if condition.is_error() {
+                    condition
+                } else if condition.is_truthy() {
                     expr.consequence.eval()
                 } else if let Some(alternative) = &expr.alternative {
                     alternative.eval()
@@ -95,6 +129,7 @@ impl Eval for Program {
         for stmt in self.statements.iter() {
             match stmt.eval() {
                 Object::Return(value) => return (*value).clone(),
+                err @ Object::Error(..) => return err,
                 obj => result = obj,
             }
         }
@@ -104,6 +139,7 @@ impl Eval for Program {
 }
 
 fn eval_integer_infix_expression(operator: &str, left: i64, right: i64) -> Object {
+    let int_type_str: &str = Object::Integer(0).type_str();
     match operator {
         "+" => Object::Integer(left + right),
         "-" => Object::Integer(left - right),
@@ -113,7 +149,10 @@ fn eval_integer_infix_expression(operator: &str, left: i64, right: i64) -> Objec
         ">" => Object::Boolean(left > right),
         "==" => Object::Boolean(left == right),
         "!=" => Object::Boolean(left != right),
-        _ => unreachable!(),
+        op => Object::Error(format!(
+            "unknown operator: {} {} {}",
+            int_type_str, op, int_type_str
+        )),
     }
 }
 
@@ -429,6 +468,56 @@ mod tests {
         for test in tests {
             let evaluated = eval_for_test(&test.input);
             check_integer_object(&evaluated, test.expected, &test.input);
+        }
+    }
+
+    #[test]
+    fn test_error_handling() {
+        struct Test {
+            input: String,
+            message: String,
+        }
+
+        let tests = [
+            Test {
+                input: "5 + true;".to_string(),
+                message: "type mismatch: INTEGER + BOOLEAN".to_string(),
+            },
+            Test {
+                input: "5 + true; 5;".to_string(),
+                message: "type mismatch: INTEGER + BOOLEAN".to_string(),
+            },
+            Test {
+                input: "-true".to_string(),
+                message: "unknown operator: -BOOLEAN".to_string(),
+            },
+            Test {
+                input: "true + false".to_string(),
+                message: "unknown operator: BOOLEAN + BOOLEAN".to_string(),
+            },
+            Test {
+                input: "5; true + false; 5".to_string(),
+                message: "unknown operator: BOOLEAN + BOOLEAN".to_string(),
+            },
+            Test {
+                input: "if (10 > 1) { true + false; }".to_string(),
+                message: "unknown operator: BOOLEAN + BOOLEAN".to_string(),
+            },
+            Test {
+                input: "if (10 > 1) { if (10 > 1) { return true + false; } return 1; }".to_string(),
+                message: "unknown operator: BOOLEAN + BOOLEAN".to_string(),
+            },
+        ];
+
+        for test in tests {
+            let evaluated = eval_for_test(&test.input);
+
+            match evaluated {
+                Object::Error(msg) => {
+                    assert_eq!(&msg, &test.message, "{}", &test.input);
+                }
+                obj => panic!("expected Error, found: {:?}", obj),
+            }
         }
     }
 }
