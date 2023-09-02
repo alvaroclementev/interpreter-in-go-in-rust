@@ -1,28 +1,51 @@
 //! Contains the main `eval` function
 
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::ast::{Expression, Program, Statement};
 use crate::object::Object;
 
-/// This is the trait that must be implemented by the AST nodes
-pub trait Eval {
-    fn eval(&self) -> Object;
+#[derive(Debug)]
+pub struct Environment(HashMap<String, Object>);
+
+impl Environment {
+    pub fn new() -> Self {
+        return Environment(HashMap::new());
+    }
+
+    fn get(&self, name: &str) -> Option<&Object> {
+        self.0.get(name)
+    }
+
+    fn set(&mut self, name: String, value: Object) {
+        self.0.insert(name, value);
+    }
 }
 
-pub fn eval(node: &impl Eval) -> Object {
-    node.eval()
+/// This is the trait that must be implemented by the AST nodes
+pub trait Eval {
+    fn eval(&self, environment: &mut Environment) -> Object;
+}
+
+pub fn eval(node: &impl Eval, environment: &mut Environment) -> Object {
+    node.eval(environment)
+}
+
+pub fn eval_in_new_env(node: &impl Eval) -> Object {
+    let mut environment = Environment::new();
+    eval(node, &mut environment)
 }
 
 impl Eval for Statement {
-    fn eval(&self) -> Object {
+    fn eval(&self, environment: &mut Environment) -> Object {
         match self {
-            Statement::Expression(expr) => expr.eval(),
+            Statement::Expression(expr) => expr.eval(environment),
             Statement::Block(block) => {
                 let mut result = Object::Null;
 
                 for stmt in block.statements.iter() {
-                    match stmt.eval() {
+                    match stmt.eval(environment) {
                         // If the block ended due to a return value, we do not
                         // unwrap it and send it up the stack to signal to nested
                         // blocks that they should return as well
@@ -34,25 +57,33 @@ impl Eval for Statement {
                 result
             }
             Statement::Return(expr) => {
-                let value = expr.value.eval();
+                let value = expr.value.eval(environment);
                 if value.is_error() {
                     value
                 } else {
                     Object::Return(Rc::new(value))
                 }
             }
-            stmt => todo!("{:?}", stmt),
+            Statement::Let(expr) => {
+                let value = expr.value.eval(environment);
+                if value.is_error() {
+                    return value;
+                }
+
+                environment.set(expr.name.value.clone(), value);
+                Object::Null
+            }
         }
     }
 }
 
 impl Eval for Expression {
-    fn eval(&self) -> Object {
+    fn eval(&self, environment: &mut Environment) -> Object {
         match self {
             Expression::IntegerLiteral(lit) => Object::Integer(lit.value),
             Expression::BooleanLiteral(lit) => Object::Boolean(lit.value),
             Expression::Prefix(expr) => {
-                let right = expr.right.eval();
+                let right = expr.right.eval(environment);
                 if right.is_error() {
                     return right;
                 }
@@ -69,18 +100,18 @@ impl Eval for Expression {
                 }
             }
             Expression::Infix(expr) => {
-                let left = expr.left.eval();
+                let left = expr.left.eval(environment);
                 if left.is_error() {
                     return left;
                 }
-                let right = expr.right.eval();
+                let right = expr.right.eval(environment);
                 if right.is_error() {
                     return right;
                 }
 
                 match (left, right) {
                     (Object::Integer(left), Object::Integer(right)) => {
-                        eval_integer_infix_expression(&expr.operator, left, right)
+                        eval_integer_infix_expression(environment, &expr.operator, left, right)
                     }
                     (left, right)
                         if std::mem::discriminant(&left) == std::mem::discriminant(&right) =>
@@ -106,16 +137,23 @@ impl Eval for Expression {
                 }
             }
             Expression::If(expr) => {
-                let condition = expr.condition.eval();
+                let condition = expr.condition.eval(environment);
                 if condition.is_error() {
                     condition
                 } else if condition.is_truthy() {
-                    expr.consequence.eval()
+                    expr.consequence.eval(environment)
                 } else if let Some(alternative) = &expr.alternative {
-                    alternative.eval()
+                    alternative.eval(environment)
                 } else {
                     Object::Null
                 }
+            }
+            Expression::Identifier(expr) => {
+                let name = &expr.value;
+                environment
+                    .get(name)
+                    .cloned()
+                    .unwrap_or_else(|| Object::Error(format!("identifier not found: {}", name)))
             }
             expr => todo!("{:?}", expr),
         }
@@ -123,11 +161,11 @@ impl Eval for Expression {
 }
 
 impl Eval for Program {
-    fn eval(&self) -> Object {
+    fn eval(&self, environment: &mut Environment) -> Object {
         let mut result = Object::Null;
 
         for stmt in self.statements.iter() {
-            match stmt.eval() {
+            match stmt.eval(environment) {
                 Object::Return(value) => return (*value).clone(),
                 err @ Object::Error(..) => return err,
                 obj => result = obj,
@@ -138,7 +176,12 @@ impl Eval for Program {
     }
 }
 
-fn eval_integer_infix_expression(operator: &str, left: i64, right: i64) -> Object {
+fn eval_integer_infix_expression(
+    _environment: &mut Environment,
+    operator: &str,
+    left: i64,
+    right: i64,
+) -> Object {
     let int_type_str: &str = Object::Integer(0).type_str();
     match operator {
         "+" => Object::Integer(left + right),
@@ -166,7 +209,7 @@ mod tests {
         let lexer = Lexer::new(input.to_string());
         let mut parser = Parser::new(lexer);
         let program = parser.parse();
-        eval(&program)
+        eval_in_new_env(&program)
     }
 
     fn check_integer_object(obj: &Object, expected: i64, input: &str) {
@@ -507,6 +550,10 @@ mod tests {
                 input: "if (10 > 1) { if (10 > 1) { return true + false; } return 1; }".to_string(),
                 message: "unknown operator: BOOLEAN + BOOLEAN".to_string(),
             },
+            Test {
+                input: "foobar".to_string(),
+                message: "identifier not found: foobar".to_string(),
+            },
         ];
 
         for test in tests {
@@ -518,6 +565,39 @@ mod tests {
                 }
                 obj => panic!("expected Error, found: {:?}", obj),
             }
+        }
+    }
+
+    #[test]
+    fn test_let_statement() {
+        struct Test {
+            input: String,
+            expected: i64,
+        }
+
+        let tests = [
+            Test {
+                input: "let a = 5; a;".to_string(),
+                expected: 5,
+            },
+            Test {
+                input: "let a = 5 * 5; a;".to_string(),
+                expected: 25,
+            },
+            Test {
+                input: "let a = 5; let b = a; b;".to_string(),
+                expected: 5,
+            },
+            Test {
+                input: "let a = 5; let b = a; let c = a + b + 5; c;".to_string(),
+                expected: 15,
+            },
+        ];
+
+        for test in tests {
+            let evaluated = eval_for_test(&test.input);
+
+            check_integer_object(&evaluated, test.expected, &test.input);
         }
     }
 }
