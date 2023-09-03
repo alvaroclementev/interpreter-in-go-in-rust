@@ -104,6 +104,7 @@ impl Eval for Expression {
         match self {
             Expression::IntegerLiteral(lit) => Object::Integer(lit.value),
             Expression::BooleanLiteral(lit) => Object::Boolean(lit.value),
+            Expression::StringLiteral(lit) => Object::String(lit.value.clone()),
             Expression::Prefix(expr) => {
                 let right = expr.right.eval(environment);
                 if right.is_error() {
@@ -735,6 +736,18 @@ mod tests {
         for test in tests {
             let evaluated = eval_for_test(&test.input);
             check_integer_object(&evaluated, test.expected, &test.input);
+        }
+    }
+
+    #[test]
+    fn test_string_literal() {
+        let input = "\"Hello World!\"".to_string();
+        let evaluated = eval_for_test(&input);
+        match evaluated {
+            Object::String(lit) => {
+                assert_eq!(lit, "Hello World!");
+            }
+            obj => panic!("unexpected value, expected String but got: {:?}", obj),
         }
     }
 }

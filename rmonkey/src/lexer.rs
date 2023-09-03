@@ -65,6 +65,7 @@ impl Lexer {
             '{' => (LBrace, self.ch.to_string()),
             '}' => (RBrace, self.ch.to_string()),
             '\0' => (Eof, "".to_string()),
+            '"' => (String, self.read_string()),
             ch if is_letter(ch) => {
                 let literal = self.read_identifier();
                 let kind = lookup_identifier(&literal);
@@ -114,6 +115,20 @@ impl Lexer {
 
         while is_digit(self.ch) {
             self.read_char();
+        }
+        self.input[position..self.position].to_string()
+    }
+
+    fn read_string(&mut self) -> String {
+        let position = self.position + 1;
+
+        // TODO(alvaro): Add support for escaping
+        // TODO(alvaro): Add error message for unterminated string literal
+        loop {
+            self.read_char();
+            if self.ch == '"' || self.ch == '\0' {
+                break;
+            }
         }
         self.input[position..self.position].to_string()
     }
@@ -198,6 +213,8 @@ if (5 < 10) {
 
 10 == 10;
 10 != 9;
+\"foobar\"
+\"foo bar\"
         "
         .to_string();
 
@@ -275,6 +292,8 @@ if (5 < 10) {
             (TokenKind::NotEq, "!="),
             (TokenKind::Int, "9"),
             (TokenKind::Semicolon, ";"),
+            (TokenKind::String, "foobar"),
+            (TokenKind::String, "foo bar"),
             (TokenKind::Eof, ""),
         ];
 

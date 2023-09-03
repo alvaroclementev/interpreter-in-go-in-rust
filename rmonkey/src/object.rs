@@ -2,7 +2,7 @@
 #![allow(dead_code)]
 
 use itertools::Itertools;
-use std::{fmt::Display, rc::Rc, cell::RefCell};
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use crate::{ast, evaluator::Environment};
 
@@ -11,6 +11,7 @@ pub enum Object {
     Null,
     Boolean(bool),
     Integer(i64),
+    String(String),
     Return(Rc<Object>),
     Error(String),
     Function(Box<Function>),
@@ -22,6 +23,7 @@ impl Display for Object {
             Object::Null => write!(f, "null"),
             Object::Boolean(val) => write!(f, "{}", val),
             Object::Integer(val) => write!(f, "{}", val),
+            Object::String(val) => write!(f, "{}", val),
             Object::Return(val) => write!(f, "{}", val),
             Object::Error(msg) => {
                 // TODO(alvaro): Proper displaying of error messages
@@ -41,6 +43,7 @@ impl Object {
             Object::Null => Object::Boolean(false),
             Object::Boolean(val) => Object::Boolean(*val),
             Object::Integer(val) => Object::Boolean(*val != 0),
+            Object::String(..) => Object::Boolean(true),
             Object::Return(obj) => obj.as_boolean(),
             obj @ Object::Error(..) => obj.clone(),
             Object::Function(..) => Object::Boolean(true), // Functions are truthy I guess
@@ -59,6 +62,7 @@ impl Object {
             Object::Null => "NULL",
             Object::Boolean(..) => "BOOLEAN",
             Object::Integer(..) => "INTEGER",
+            Object::String(..) => "STRING",
             Object::Return(..) => "RETURN_VALUE",
             Object::Error(..) => "ERROR",
             Object::Function(..) => "FUNCTION",

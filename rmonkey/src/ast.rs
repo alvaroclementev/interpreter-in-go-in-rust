@@ -15,6 +15,7 @@ pub enum Expression {
     Identifier(Identifier),
     IntegerLiteral(IntegerLiteral),
     BooleanLiteral(BooleanLiteral),
+    StringLiteral(StringLiteral),
     Prefix(PrefixExpression),
     Infix(InfixExpression),
     If(IfExpression),
@@ -29,6 +30,7 @@ impl Node for Expression {
             Expression::Identifier(expr) => expr.token.literal.as_ref(),
             Expression::IntegerLiteral(expr) => expr.token.literal.as_ref(),
             Expression::BooleanLiteral(expr) => expr.token.literal.as_ref(),
+            Expression::StringLiteral(expr) => expr.token.literal.as_ref(),
             Expression::Prefix(expr) => expr.token.literal.as_ref(),
             Expression::Infix(expr) => expr.token.literal.as_ref(),
             Expression::If(expr) => expr.token.literal.as_ref(),
@@ -45,6 +47,7 @@ impl Display for Expression {
             Expression::Identifier(expr) => expr.fmt(f),
             Expression::IntegerLiteral(expr) => expr.fmt(f),
             Expression::BooleanLiteral(expr) => expr.fmt(f),
+            Expression::StringLiteral(expr) => expr.fmt(f),
             Expression::Prefix(expr) => expr.fmt(f),
             Expression::Infix(expr) => expr.fmt(f),
             Expression::If(expr) => expr.fmt(f),
@@ -125,6 +128,31 @@ impl Node for BooleanLiteral {
 impl Display for BooleanLiteral {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.value)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StringLiteral {
+    pub token: Token,
+    pub value: String,
+}
+
+impl StringLiteral {
+    pub fn new(token: Token, value: String) -> Self {
+        Self { token, value }
+    }
+}
+
+impl Node for StringLiteral {
+    fn token_literal(&self) -> &str {
+        self.token.literal.as_ref()
+    }
+}
+
+impl Display for StringLiteral {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.token_literal())?;
         Ok(())
     }
 }

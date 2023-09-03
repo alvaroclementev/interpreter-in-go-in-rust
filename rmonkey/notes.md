@@ -13,6 +13,8 @@ Things that should probably be changed
             - It's a bit weird for testing when we want to have the generic version (the enum)
                 - Maybe it would be solved with simple `From` implementation and a call to `into()`
     - For error handling maybe using Result<> is better, so that we can use the `?` operator
+    - If we make `eval` consume the object being evaluated we can avoid a lot of cloning
+        - Not sure if this couild impact things like error reporting
 
 - Tests
     - For table driven tests we could use something like [test_case](https://docs.rs/test-case/latest/test_case/)

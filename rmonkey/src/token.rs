@@ -7,6 +7,7 @@ pub enum TokenKind {
     // Identifier + Literals
     Identifier,
     Int,
+    String,
     // Operators
     Assign,
     Plus,

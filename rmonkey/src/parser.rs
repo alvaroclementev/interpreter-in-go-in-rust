@@ -169,6 +169,7 @@ impl Parser {
             TokenKind::Minus => self.parse_prefix_expression(),
             TokenKind::True => self.parse_boolean_literal(),
             TokenKind::False => self.parse_boolean_literal(),
+            TokenKind::String => self.parse_string_literal(),
             TokenKind::LParen => self.parse_grouped_expression(),
             TokenKind::If => self.parse_if_expression(),
             TokenKind::Function => self.parse_function_literal(),
@@ -231,6 +232,11 @@ impl Parser {
         let value = self.current_is(TokenKind::True);
         let literal = ast::BooleanLiteral::new(self.current.clone(), value);
         Ok(ast::Expression::BooleanLiteral(literal))
+    }
+
+    fn parse_string_literal(&self) -> Result<ast::Expression, String> {
+        let literal = ast::StringLiteral::new(self.current.clone(), self.current.literal.clone());
+        Ok(ast::Expression::StringLiteral(literal))
     }
 
     fn parse_prefix_expression(&mut self) -> Result<ast::Expression, String> {
@@ -679,6 +685,28 @@ mod tests {
             unreachable!()
         };
         check_integer_literal(literal, 5);
+    }
+
+    #[test]
+    fn test_string_literal_expression() {
+        let input = "\"hello world\"".to_string();
+
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+
+        check_parser_errors(&mut parser);
+
+        assert_eq!(program.statements.len(), 1);
+        let literal = &program.statements[0];
+        assert!(matches!(
+            literal,
+            Statement::Expression(Expression::StringLiteral(..))
+        ));
+        let Statement::Expression(Expression::StringLiteral(literal)) = literal else {
+            unreachable!()
+        };
+        assert_eq!(&literal.value, "hello world");
     }
 
     #[test]
