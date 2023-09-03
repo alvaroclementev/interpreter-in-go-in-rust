@@ -16,3 +16,6 @@ Things that should probably be changed
 
 - Tests
     - For table driven tests we could use something like [test_case](https://docs.rs/test-case/latest/test_case/)
+
+- CLI
+    - Use a `readline` implementation, for instance [rustyline](https://github.com/kkawakam/rustyline)
