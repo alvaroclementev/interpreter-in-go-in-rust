@@ -36,8 +36,18 @@ pub fn start(input: impl Read, output: impl Write) -> io::Result<()> {
         // Read
         let mut buf = String::new();
         bufread.read_line(&mut buf)?;
+        if buf.is_empty() {
+            // Read an EOF
+            writeln!(bufwrite, "Good bye!")?;
+            break;
+        }
+
         // Strip the newline at the end
-        let buf = buf[..buf.len() - 1].to_string();
+        let buf = if buf.ends_with('\n') {
+            buf.strip_suffix('\n').unwrap()
+        } else {
+            &buf
+        };
 
         if buf == ".exit" {
             writeln!(bufwrite, "Good bye!")?;
@@ -45,7 +55,7 @@ pub fn start(input: impl Read, output: impl Write) -> io::Result<()> {
         }
 
         // Parse
-        let lexer = Lexer::new(buf);
+        let lexer = Lexer::new(buf.to_string());
         let mut parser = Parser::new(lexer);
 
         let program = parser.parse();
