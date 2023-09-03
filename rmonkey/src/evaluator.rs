@@ -136,6 +136,9 @@ impl Eval for Expression {
                     (Object::Integer(left), Object::Integer(right)) => {
                         eval_integer_infix_expression(environment, &expr.operator, left, right)
                     }
+                    (Object::String(left), Object::String(right)) => {
+                        eval_string_infix_expression(environment, &expr.operator, left, right)
+                    }
                     (left, right)
                         if std::mem::discriminant(&left) == std::mem::discriminant(&right) =>
                     {
@@ -238,6 +241,18 @@ fn eval_integer_infix_expression(
             "unknown operator: {} {} {}",
             int_type_str, op, int_type_str
         )),
+    }
+}
+
+fn eval_string_infix_expression(
+    _environment: Rc<RefCell<Environment>>,
+    operator: &str,
+    left: String,
+    right: String,
+) -> Object {
+    match operator {
+        "+" => Object::String(format!("{}{}", left, right)),
+        op => Object::Error(format!("unknown operator: STRING {} STRING", op)),
     }
 }
 
@@ -637,6 +652,10 @@ mod tests {
                 input: "foobar".to_string(),
                 message: "identifier not found: foobar".to_string(),
             },
+            Test {
+                input: r#""Hello" - "World""#.to_string(),
+                message: "unknown operator: STRING - STRING".to_string(),
+            },
         ];
 
         for test in tests {
@@ -742,6 +761,18 @@ mod tests {
     #[test]
     fn test_string_literal() {
         let input = "\"Hello World!\"".to_string();
+        let evaluated = eval_for_test(&input);
+        match evaluated {
+            Object::String(lit) => {
+                assert_eq!(lit, "Hello World!");
+            }
+            obj => panic!("unexpected value, expected String but got: {:?}", obj),
+        }
+    }
+
+    #[test]
+    fn test_string_concatenation() {
+        let input = r#""Hello" + " " + "World!""#.to_string();
         let evaluated = eval_for_test(&input);
         match evaluated {
             Object::String(lit) => {
