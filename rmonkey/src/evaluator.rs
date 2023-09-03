@@ -2,6 +2,7 @@
 
 #![allow(dead_code)]
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -9,45 +10,64 @@ use crate::ast::{Expression, Program, Statement};
 use crate::object::{Function, Object};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Environment(HashMap<String, Object>);
+pub struct Environment {
+    store: HashMap<String, Object>,
+    outer: Option<Rc<RefCell<Environment>>>,
+}
 
 impl Environment {
     pub fn new() -> Self {
-        Environment(HashMap::new())
+        Environment {
+            store: HashMap::new(),
+            outer: None,
+        }
     }
 
-    fn get(&self, name: &str) -> Option<&Object> {
-        self.0.get(name)
+    fn with_outer(outer: Rc<RefCell<Environment>>) -> Self {
+        let mut env = Environment::new();
+        env.outer = Some(outer);
+        env
+    }
+
+    fn get(&self, name: &str) -> Option<Object> {
+        // FIXME(alvaro): This should return a reference, however I could not
+        // tame the borrow checker to allow me to get references to outer
+        // outer environments... so we are cloning
+        self.store.get(name).cloned().or_else(|| {
+            self.outer
+                .as_ref()
+                .and_then(|outer| outer.borrow().get(name))
+        })
     }
 
     fn set(&mut self, name: String, value: Object) {
-        self.0.insert(name, value);
+        self.store.insert(name, value);
     }
 }
 
 /// This is the trait that must be implemented by the AST nodes
 pub trait Eval {
-    fn eval(&self, environment: &mut Environment) -> Object;
+    fn eval(&self, environment: Rc<RefCell<Environment>>) -> Object;
 }
 
-pub fn eval(node: &impl Eval, environment: &mut Environment) -> Object {
+pub fn eval(node: &impl Eval, environment: Rc<RefCell<Environment>>) -> Object {
     node.eval(environment)
 }
 
 pub fn eval_in_new_env(node: &impl Eval) -> Object {
-    let mut environment = Environment::new();
-    eval(node, &mut environment)
+    let environment = Rc::new(RefCell::new(Environment::new()));
+    eval(node, environment)
 }
 
 impl Eval for Statement {
-    fn eval(&self, environment: &mut Environment) -> Object {
+    fn eval(&self, environment: Rc<RefCell<Environment>>) -> Object {
         match self {
             Statement::Expression(expr) => expr.eval(environment),
             Statement::Block(block) => {
                 let mut result = Object::Null;
 
                 for stmt in block.statements.iter() {
-                    match stmt.eval(environment) {
+                    match stmt.eval(environment.clone()) {
                         // If the block ended due to a return value, we do not
                         // unwrap it and send it up the stack to signal to nested
                         // blocks that they should return as well
@@ -67,12 +87,12 @@ impl Eval for Statement {
                 }
             }
             Statement::Let(expr) => {
-                let value = expr.value.eval(environment);
+                let value = expr.value.eval(environment.clone());
                 if value.is_error() {
                     return value;
                 }
 
-                environment.set(expr.name.value.clone(), value);
+                environment.borrow_mut().set(expr.name.value.clone(), value);
                 Object::Null
             }
         }
@@ -80,7 +100,7 @@ impl Eval for Statement {
 }
 
 impl Eval for Expression {
-    fn eval(&self, environment: &mut Environment) -> Object {
+    fn eval(&self, environment: Rc<RefCell<Environment>>) -> Object {
         match self {
             Expression::IntegerLiteral(lit) => Object::Integer(lit.value),
             Expression::BooleanLiteral(lit) => Object::Boolean(lit.value),
@@ -102,11 +122,11 @@ impl Eval for Expression {
                 }
             }
             Expression::Infix(expr) => {
-                let left = expr.left.eval(environment);
+                let left = expr.left.eval(environment.clone());
                 if left.is_error() {
                     return left;
                 }
-                let right = expr.right.eval(environment);
+                let right = expr.right.eval(environment.clone());
                 if right.is_error() {
                     return right;
                 }
@@ -139,11 +159,11 @@ impl Eval for Expression {
                 }
             }
             Expression::If(expr) => {
-                let condition = expr.condition.eval(environment);
+                let condition = expr.condition.eval(environment.clone());
                 if condition.is_error() {
                     condition
                 } else if condition.is_truthy() {
-                    expr.consequence.eval(environment)
+                    expr.consequence.eval(environment.clone())
                 } else if let Some(alternative) = &expr.alternative {
                     alternative.eval(environment)
                 } else {
@@ -153,27 +173,40 @@ impl Eval for Expression {
             Expression::Identifier(expr) => {
                 let name = &expr.value;
                 environment
+                    .borrow()
                     .get(name)
-                    .cloned()
                     .unwrap_or_else(|| Object::Error(format!("identifier not found: {}", name)))
             }
-            // TODO(alvaro): Too much cloning in here...
+            // FIXME(alvaro): Too much cloning in here...
             Expression::Function(expr) => Object::Function(Box::new(Function::new(
                 expr.parameters.clone(),
                 expr.body.clone(),
                 environment.clone(),
             ))),
+            Expression::Call(expr) => {
+                let function = expr.function.eval(environment.clone());
+                if function.is_error() {
+                    return function;
+                }
+                // TODO(alvaro): If we used a `Result` instead this would not
+                // be so awkward
+                let mut args = eval_expressions(&expr.arguments, environment);
+                if args.len() == 1 && args[0].is_error() {
+                    return args.pop().unwrap();
+                }
+                eval_function_application(function, args)
+            }
             expr => todo!("{:?}", expr),
         }
     }
 }
 
 impl Eval for Program {
-    fn eval(&self, environment: &mut Environment) -> Object {
+    fn eval(&self, environment: Rc<RefCell<Environment>>) -> Object {
         let mut result = Object::Null;
 
         for stmt in self.statements.iter() {
-            match stmt.eval(environment) {
+            match stmt.eval(environment.clone()) {
                 Object::Return(value) => return (*value).clone(),
                 err @ Object::Error(..) => return err,
                 obj => result = obj,
@@ -185,7 +218,7 @@ impl Eval for Program {
 }
 
 fn eval_integer_infix_expression(
-    _environment: &mut Environment,
+    _environment: Rc<RefCell<Environment>>,
     operator: &str,
     left: i64,
     right: i64,
@@ -207,6 +240,47 @@ fn eval_integer_infix_expression(
     }
 }
 
+fn eval_expressions(
+    expressions: &[Expression],
+    environment: Rc<RefCell<Environment>>,
+) -> Vec<Object> {
+    let mut result = Vec::new();
+
+    for expr in expressions {
+        match expr.eval(environment.clone()) {
+            err @ Object::Error(..) => return vec![err],
+            new_result => result.push(new_result),
+        }
+    }
+    result
+}
+
+fn eval_function_application(fun: Object, args: Vec<Object>) -> Object {
+    let Object::Function(fun) = fun else {
+        return Object::Error(format!("not a function: {}", fun.type_str()));
+    };
+
+    let extended_env = Rc::new(RefCell::new(Environment::with_outer(
+        fun.environment.clone(),
+    )));
+
+    // Extend the environment
+    args.into_iter()
+        .zip(fun.parameters.iter())
+        .for_each(|(arg, param)| extended_env.borrow_mut().set(param.value.clone(), arg));
+
+    // FIXME(alvaro): It's awkward that we have to wrap this to eval it...
+    let body_stmt = Statement::Block(fun.body);
+    let result = body_stmt.eval(extended_env);
+
+    // Unwrap the result
+    match result {
+        // FIXME(alvaro): Unfortunate clone
+        Object::Return(value) => (*value).clone(),
+        obj => obj,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{lexer::Lexer, parser::Parser};
@@ -223,7 +297,7 @@ mod tests {
     fn check_integer_object(obj: &Object, expected: i64, input: &str) {
         match obj {
             Object::Integer(val) => assert_eq!(*val, expected, "{}", input),
-            _ => panic!("expected Integer object, found {:?}", obj),
+            _ => panic!("expected Integer object, found {:?} ({})", obj, input),
         };
     }
 
@@ -621,6 +695,46 @@ mod tests {
                 assert_eq!(fun.body.to_string(), "(x + 2)");
             }
             obj => panic!("unexpected value, expected Function but got: {:?}", obj),
+        }
+    }
+
+    #[test]
+    fn test_function_application() {
+        struct Test {
+            input: String,
+            expected: i64,
+        }
+
+        let tests = [
+            Test {
+                input: "let identity = fn(x) { x; }; identity(5);".to_string(),
+                expected: 5,
+            },
+            Test {
+                input: "let identity = fn(x) { return x; }; identity(5);".to_string(),
+                expected: 5,
+            },
+            Test {
+                input: "let double = fn(x) { x * 2; }; double(5);".to_string(),
+                expected: 10,
+            },
+            Test {
+                input: "let add = fn(x, y) { x + y; }; add(5, 5);".to_string(),
+                expected: 10,
+            },
+            Test {
+                input: "let add = fn(x, y) { x + y; }; add(5 + 5, add(5, 5));".to_string(),
+                expected: 20,
+            },
+            Test {
+                input: "fn(x) { x; }(5)".to_string(),
+                expected: 5,
+            },
+        ];
+
+        for test in tests {
+            let evaluated = eval_for_test(&test.input);
+            check_integer_object(&evaluated, test.expected, &test.input);
         }
     }
 }

@@ -1,6 +1,14 @@
-use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
+use std::{
+    cell::RefCell,
+    io::{self, BufRead, BufReader, BufWriter, Read, Write},
+    rc::Rc,
+};
 
-use crate::{evaluator::{self, Environment}, lexer::Lexer, parser::Parser};
+use crate::{
+    evaluator::{self, Environment},
+    lexer::Lexer,
+    parser::Parser,
+};
 
 const PROMPT: &str = ">> ";
 const MONKEY_FACE: &str = r#"            __,__
@@ -19,7 +27,7 @@ const MONKEY_FACE: &str = r#"            __,__
 pub fn start(input: impl Read, output: impl Write) -> io::Result<()> {
     let mut bufread = BufReader::new(input);
     let mut bufwrite = BufWriter::new(output);
-    let mut environment = Environment::new();
+    let environment = Rc::new(RefCell::new(Environment::new()));
 
     loop {
         write!(bufwrite, "{}", PROMPT)?;
@@ -47,7 +55,7 @@ pub fn start(input: impl Read, output: impl Write) -> io::Result<()> {
         }
 
         // Eval
-        let result = evaluator::eval(&program, &mut environment);
+        let result = evaluator::eval(&program, environment.clone());
 
         // Print
         writeln!(bufwrite, "{}", result).unwrap();

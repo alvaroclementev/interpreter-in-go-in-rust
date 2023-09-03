@@ -2,7 +2,7 @@
 #![allow(dead_code)]
 
 use itertools::Itertools;
-use std::{fmt::Display, rc::Rc};
+use std::{fmt::Display, rc::Rc, cell::RefCell};
 
 use crate::{ast, evaluator::Environment};
 
@@ -74,14 +74,14 @@ impl Object {
 pub struct Function {
     pub parameters: Vec<ast::Identifier>,
     pub body: ast::Block,
-    pub environment: Environment,
+    pub environment: Rc<RefCell<Environment>>,
 }
 
 impl Function {
     pub fn new(
         parameters: Vec<ast::Identifier>,
         body: ast::Block,
-        environment: Environment,
+        environment: Rc<RefCell<Environment>>,
     ) -> Self {
         Self {
             parameters,
