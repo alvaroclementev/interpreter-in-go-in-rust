@@ -22,6 +22,7 @@ pub enum Expression {
     If(IfExpression),
     Function(FunctionLiteral),
     Call(CallExpression),
+    Index(IndexExpression),
 }
 
 impl Node for Expression {
@@ -38,6 +39,7 @@ impl Node for Expression {
             Expression::If(expr) => expr.token.literal.as_ref(),
             Expression::Function(expr) => expr.token.literal.as_ref(),
             Expression::Call(expr) => expr.token.literal.as_ref(),
+            Expression::Index(expr) => expr.token.literal.as_ref(),
         }
     }
 }
@@ -56,6 +58,7 @@ impl Display for Expression {
             Expression::If(expr) => expr.fmt(f),
             Expression::Function(expr) => expr.fmt(f),
             Expression::Call(expr) => expr.fmt(f),
+            Expression::Index(expr) => expr.fmt(f),
         }
     }
 }
@@ -352,6 +355,32 @@ impl Display for CallExpression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let args = self.arguments.iter().map(|a| format!("{}", a)).join(", ");
         write!(f, "{}({})", self.function, args)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexExpression {
+    pub token: Token,
+    pub left: Rc<Expression>,
+    pub right: Rc<Expression>,
+}
+
+impl IndexExpression {
+    pub fn new(token: Token, left: Rc<Expression>, right: Rc<Expression>) -> Self {
+        Self { token, left, right }
+    }
+}
+
+impl Node for IndexExpression {
+    fn token_literal(&self) -> &str {
+        self.token.literal.as_ref()
+    }
+}
+
+impl Display for IndexExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}[{}])", self.left, self.right)?;
         Ok(())
     }
 }

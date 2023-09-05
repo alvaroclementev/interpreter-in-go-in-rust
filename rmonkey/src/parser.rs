@@ -17,6 +17,7 @@ pub enum Precedence {
     Product,
     Prefix,
     Call,
+    Index,
 }
 
 impl Precedence {
@@ -31,6 +32,7 @@ impl Precedence {
             TokenKind::Slash => Precedence::Product,
             TokenKind::Asterisk => Precedence::Product,
             TokenKind::LParen => Precedence::Call,
+            TokenKind::LBracket => Precedence::Index,
             _ => Precedence::Lowest,
         }
     }
@@ -202,6 +204,7 @@ impl Parser {
             TokenKind::Lt => self.parse_infix_expression(left),
             TokenKind::Gt => self.parse_infix_expression(left),
             TokenKind::LParen => self.parse_call_expression(left),
+            TokenKind::LBracket => self.parse_index_expression(left),
             kind => Err(format!("unimplemented infix ({:?})", kind)),
         };
         // Report the error and return
@@ -412,6 +415,25 @@ impl Parser {
             token,
             Rc::new(function),
             arguments,
+        )))
+    }
+
+    fn parse_index_expression(&mut self, left: ast::Expression) -> Result<ast::Expression, String> {
+        let token = self.current.clone();
+        self.next_token();
+
+        let right = self
+            .parse_expression(Precedence::Lowest)
+            .ok_or_else(|| "failed to parse RHS of index expression".to_string())?;
+
+        if !self.expect_peek(TokenKind::RBracket) {
+            return Err("expected a ']' when parsing index expression".to_string());
+        }
+
+        Ok(ast::Expression::Index(ast::IndexExpression::new(
+            token,
+            Rc::new(left),
+            Rc::new(right),
         )))
     }
 
@@ -1024,10 +1046,18 @@ mod tests {
                 input: "add(a + b + c * d / f + g)".to_string(),
                 expected: "add((((a + b) + ((c * d) / f)) + g))".to_string(),
             },
+            Test {
+                input: "a * [1, 2, 3, 4][b * c] * d".to_string(),
+                expected: "((a * ([1, 2, 3, 4][(b * c)])) * d)".to_string(),
+            },
+            Test {
+                input: "add(a * b[2], b[1], 2 * [1, 2][1])".to_string(),
+                expected: "add((a * (b[2])), (b[1]), (2 * ([1, 2][1])))".to_string(),
+            },
         ];
 
         for test in tests {
-            let lexer = Lexer::new(test.input);
+            let lexer = Lexer::new(test.input.clone());
             let mut parser = Parser::new(lexer);
             let program = parser.parse();
             check_parser_errors(&mut parser);
@@ -1334,5 +1364,23 @@ mod tests {
             "+",
             TestValue::Int(3),
         );
+    }
+
+    #[test]
+    fn test_parsing_index_expressions() {
+        let input = "myArray[1 + 1]".to_string();
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+        check_parser_errors(&mut parser);
+
+        assert_eq!(program.statements.len(), 1);
+
+        let Statement::Expression(Expression::Index(index)) = &program.statements[0] else {
+            unreachable!()
+        };
+
+        check_identifier(&index.left, "myArray");
+        check_infix_expression(&index.right, TestValue::Int(1), "+", TestValue::Int(1));
     }
 }
