@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::ast::{Expression, Program, Statement};
-use crate::object::{Function, Object};
+use crate::object::{BuiltinFunction, Function, Object};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Environment {
@@ -176,10 +176,17 @@ impl Eval for Expression {
             }
             Expression::Identifier(expr) => {
                 let name = &expr.value;
-                environment
-                    .borrow()
-                    .get(name)
-                    .unwrap_or_else(|| Object::Error(format!("identifier not found: {}", name)))
+                if let Some(ident) = environment.borrow().get(name) {
+                    return ident;
+                }
+
+                // Check if the value is a builtin function
+                if let Some(builtin) = get_builtin(name) {
+                    return Object::Builtin(builtin);
+                }
+
+                // The identifier does not exist
+                Object::Error(format!("identifier not found: {}", name))
             }
             // FIXME(alvaro): Too much cloning in here...
             Expression::Function(expr) => Object::Function(Box::new(Function::new(
@@ -192,6 +199,7 @@ impl Eval for Expression {
                 if function.is_error() {
                     return function;
                 }
+                //
                 // TODO(alvaro): If we used a `Result` instead this would not
                 // be so awkward
                 let mut args = eval_expressions(&expr.arguments, environment);
@@ -272,28 +280,51 @@ fn eval_expressions(
 }
 
 fn eval_function_application(fun: Object, args: Vec<Object>) -> Object {
-    let Object::Function(fun) = fun else {
-        return Object::Error(format!("not a function: {}", fun.type_str()));
-    };
+    match fun {
+        Object::Builtin(builtin) => builtin.call(args),
+        Object::Function(fun) => {
+            let extended_env = Rc::new(RefCell::new(Environment::with_outer(
+                fun.environment.clone(),
+            )));
+            // Extend the environment
+            args.into_iter()
+                .zip(fun.parameters.iter())
+                .for_each(|(arg, param)| extended_env.borrow_mut().set(param.value.clone(), arg));
 
-    let extended_env = Rc::new(RefCell::new(Environment::with_outer(
-        fun.environment.clone(),
-    )));
+            // FIXME(alvaro): It's awkward that we have to wrap this to eval it...
+            let body_stmt = Statement::Block(fun.body);
+            let result = body_stmt.eval(extended_env);
 
-    // Extend the environment
-    args.into_iter()
-        .zip(fun.parameters.iter())
-        .for_each(|(arg, param)| extended_env.borrow_mut().set(param.value.clone(), arg));
+            // Unwrap the result
+            match result {
+                // FIXME(alvaro): Unfortunate clone
+                Object::Return(value) => (*value).clone(),
+                obj => obj,
+            }
+        }
+        obj => Object::Error(format!("not a function: {}", obj.type_str())),
+    }
+}
 
-    // FIXME(alvaro): It's awkward that we have to wrap this to eval it...
-    let body_stmt = Statement::Block(fun.body);
-    let result = body_stmt.eval(extended_env);
+fn get_builtin(name: &str) -> Option<BuiltinFunction> {
+    // FIXME(alvaro): This is created a new reference on every call
+    match name {
+        "len" => Some(BuiltinFunction::new(
+            name.to_string(),
+            Some(1),
+            Rc::new(builtin_len),
+        )),
+        _ => None,
+    }
+}
 
-    // Unwrap the result
-    match result {
-        // FIXME(alvaro): Unfortunate clone
-        Object::Return(value) => (*value).clone(),
-        obj => obj,
+fn builtin_len(args: Vec<Object>) -> Object {
+    match &args[0] {
+        Object::String(value) => Object::Integer(value.len() as i64),
+        obj => Object::Error(format!(
+            "argument to `len` not supported, got {}",
+            obj.type_str()
+        )),
     }
 }
 
@@ -302,6 +333,13 @@ mod tests {
     use crate::{lexer::Lexer, parser::Parser};
 
     use super::*;
+
+    enum TestValue {
+        Int(i64),
+        Boolean(bool),
+        String(String),
+        Error(String),
+    }
 
     fn eval_for_test(input: &str) -> Object {
         let lexer = Lexer::new(input.to_string());
@@ -322,6 +360,29 @@ mod tests {
             Object::Boolean(val) => assert_eq!(*val, expected, "{}", input),
             _ => panic!("expected Integer object, found {:?}", obj),
         };
+    }
+
+    fn check_string_object(obj: &Object, expected: &str, input: &str) {
+        match obj {
+            Object::String(val) => assert_eq!(val, expected, "{}", input),
+            _ => panic!("expected String object, found {:?}", obj),
+        };
+    }
+
+    fn check_error_object(obj: &Object, expected: &str, input: &str) {
+        match obj {
+            Object::Error(msg) => assert_eq!(msg, expected, "{}", input),
+            obj => panic!("expected Error object, found {:?}", obj),
+        };
+    }
+
+    fn check_object(evaluated: &Object, expected: &TestValue, input: &str) {
+        match expected {
+            TestValue::Int(value) => check_integer_object(evaluated, *value, input),
+            TestValue::Boolean(value) => check_boolean_object(evaluated, *value, input),
+            TestValue::String(value) => check_string_object(evaluated, value, input),
+            TestValue::Error(message) => check_error_object(evaluated, message, input),
+        }
     }
 
     #[test]
@@ -779,6 +840,44 @@ mod tests {
                 assert_eq!(lit, "Hello World!");
             }
             obj => panic!("unexpected value, expected String but got: {:?}", obj),
+        }
+    }
+
+    #[test]
+    fn test_builtin_functions() {
+        struct Test {
+            input: String,
+            expected: TestValue,
+        }
+
+        let tests = [
+            Test {
+                input: "len(\"\")".to_string(),
+                expected: TestValue::Int(0),
+            },
+            Test {
+                input: "len(\"four\")".to_string(),
+                expected: TestValue::Int(4),
+            },
+            Test {
+                input: "len(\"hello world\")".to_string(),
+                expected: TestValue::Int(11),
+            },
+            Test {
+                input: "len(1)".to_string(),
+                expected: TestValue::Error(
+                    "argument to `len` not supported, got INTEGER".to_string(),
+                ),
+            },
+            Test {
+                input: "len(\"one\", \"two\")".to_string(),
+                expected: TestValue::Error("wrong number of arguments. got=2, want=1".to_string()),
+            },
+        ];
+
+        for test in tests {
+            let evaluated = eval_for_test(&test.input);
+            check_object(&evaluated, &test.expected, &test.input);
         }
     }
 }

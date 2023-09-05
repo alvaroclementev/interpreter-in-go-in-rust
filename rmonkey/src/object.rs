@@ -15,6 +15,7 @@ pub enum Object {
     Return(Rc<Object>),
     Error(String),
     Function(Box<Function>),
+    Builtin(BuiltinFunction),
 }
 
 impl Display for Object {
@@ -33,6 +34,7 @@ impl Display for Object {
                 let params = fun.parameters.iter().map(|p| format!("{}", p)).join(", ");
                 write!(f, "fn ({}) {{\n{}\n}}", params, fun.body)
             }
+            Object::Builtin(..) => write!(f, "builtin function"),
         }
     }
 }
@@ -47,6 +49,7 @@ impl Object {
             Object::Return(obj) => obj.as_boolean(),
             obj @ Object::Error(..) => obj.clone(),
             Object::Function(..) => Object::Boolean(true), // Functions are truthy I guess
+            Object::Builtin(..) => Object::Boolean(true),  // Functions are truthy I guess
         }
     }
 
@@ -66,6 +69,7 @@ impl Object {
             Object::Return(..) => "RETURN_VALUE",
             Object::Error(..) => "ERROR",
             Object::Function(..) => "FUNCTION",
+            Object::Builtin(..) => "BUILTIN",
         }
     }
 
@@ -92,5 +96,63 @@ impl Function {
             body,
             environment,
         }
+    }
+}
+
+/// A wrapper over a builtin function
+///
+/// It's separated to be able to implement common traits (Debug, Eq) on it
+/// manually, so that Object stays simpler
+#[derive(Clone)]
+pub struct BuiltinFunction {
+    pub name: String,
+    pub param_count: Option<u8>,
+    pub function: Rc<dyn Fn(Vec<Object>) -> Object>,
+}
+
+impl PartialEq for BuiltinFunction {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name && self.param_count == other.param_count
+    }
+}
+impl Eq for BuiltinFunction {}
+
+impl BuiltinFunction {
+    pub fn new(
+        name: String,
+        param_count: Option<u8>,
+        function: Rc<dyn Fn(Vec<Object>) -> Object>,
+    ) -> Self {
+        Self {
+            name,
+            param_count,
+            function,
+        }
+    }
+
+    pub fn call(&self, parameters: Vec<Object>) -> Object {
+        // Check the number of params
+        if let Some(count) = &self.param_count {
+            if parameters.len() != *count as usize {
+                return Object::Error(format!(
+                    "wrong number of arguments. got={}, want={}",
+                    parameters.len(),
+                    count
+                ));
+            }
+        }
+
+        // Actually call the function
+        (*self.function)(parameters)
+    }
+}
+
+impl std::fmt::Debug for BuiltinFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BuiltinFunction")
+            .field("name", &self.name)
+            .field("param_count", &self.param_count)
+            .field("function", &"<function>")
+            .finish()
     }
 }
