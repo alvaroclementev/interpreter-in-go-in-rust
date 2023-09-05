@@ -170,6 +170,7 @@ impl Parser {
             TokenKind::True => self.parse_boolean_literal(),
             TokenKind::False => self.parse_boolean_literal(),
             TokenKind::String => self.parse_string_literal(),
+            TokenKind::LBracket => self.parse_array_literal(),
             TokenKind::LParen => self.parse_grouped_expression(),
             TokenKind::If => self.parse_if_expression(),
             TokenKind::Function => self.parse_function_literal(),
@@ -237,6 +238,15 @@ impl Parser {
     fn parse_string_literal(&self) -> Result<ast::Expression, String> {
         let literal = ast::StringLiteral::new(self.current.clone(), self.current.literal.clone());
         Ok(ast::Expression::StringLiteral(literal))
+    }
+
+    fn parse_array_literal(&mut self) -> Result<ast::Expression, String> {
+        let token = self.current.clone();
+
+        // Parse the elements
+        let elements = self.parse_expression_list(TokenKind::RBracket)?;
+        let literal = ast::ArrayLiteral::new(token, elements);
+        Ok(ast::Expression::ArrayLiteral(literal))
     }
 
     fn parse_prefix_expression(&mut self) -> Result<ast::Expression, String> {
@@ -396,7 +406,7 @@ impl Parser {
         function: ast::Expression,
     ) -> Result<ast::Expression, String> {
         let token = self.current.clone();
-        let arguments = self.parse_call_arguments()?;
+        let arguments = self.parse_expression_list(TokenKind::RParen)?;
 
         Ok(ast::Expression::Call(ast::CallExpression::new(
             token,
@@ -405,19 +415,22 @@ impl Parser {
         )))
     }
 
-    fn parse_call_arguments(&mut self) -> Result<Vec<ast::Expression>, String> {
-        let mut arguments = Vec::new();
-        if self.peek_is(TokenKind::RParen) {
+    fn parse_expression_list(
+        &mut self,
+        end_kind: TokenKind,
+    ) -> Result<Vec<ast::Expression>, String> {
+        let mut elements = Vec::new();
+        if self.peek_is(end_kind) {
             // There are no arguments
             self.next_token();
-            return Ok(arguments);
+            return Ok(elements);
         }
 
         self.next_token();
         let expr = self
             .parse_expression(Precedence::Lowest)
-            .ok_or("failed to parse function argument")?;
-        arguments.push(expr);
+            .ok_or("failed to parse expression list")?;
+        elements.push(expr);
 
         while self.peek_is(TokenKind::Comma) {
             self.next_token();
@@ -425,14 +438,17 @@ impl Parser {
 
             let expr = self
                 .parse_expression(Precedence::Lowest)
-                .ok_or("failed to parse function argument")?;
-            arguments.push(expr);
+                .ok_or("failed to parse expression list element")?;
+            elements.push(expr);
         }
 
-        if !self.expect_peek(TokenKind::RParen) {
-            return Err("expected a ')' when parsing function arguments".to_string());
+        if !self.expect_peek(end_kind) {
+            return Err(format!(
+                "expected a '{:?}' when parsing expression list element",
+                end_kind
+            ));
         }
-        Ok(arguments)
+        Ok(elements)
     }
 
     fn current_is(&self, kind: TokenKind) -> bool {
@@ -1288,5 +1304,35 @@ mod tests {
                 assert_eq!(&format!("{}", arg), expected);
             }
         }
+    }
+
+    #[test]
+    fn test_parsing_array_literals() {
+        let input = "[1, 2 * 2, 3 + 3]".to_string();
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+        check_parser_errors(&mut parser);
+
+        assert_eq!(program.statements.len(), 1);
+
+        let Statement::Expression(Expression::ArrayLiteral(array)) = &program.statements[0] else {
+            unreachable!()
+        };
+
+        assert_eq!(array.elements.len(), 3);
+        check_integer_literal(&array.elements[0], 1);
+        check_infix_expression(
+            &array.elements[1],
+            TestValue::Int(2),
+            "*",
+            TestValue::Int(2),
+        );
+        check_infix_expression(
+            &array.elements[2],
+            TestValue::Int(3),
+            "+",
+            TestValue::Int(3),
+        );
     }
 }

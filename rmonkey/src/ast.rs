@@ -16,6 +16,7 @@ pub enum Expression {
     IntegerLiteral(IntegerLiteral),
     BooleanLiteral(BooleanLiteral),
     StringLiteral(StringLiteral),
+    ArrayLiteral(ArrayLiteral),
     Prefix(PrefixExpression),
     Infix(InfixExpression),
     If(IfExpression),
@@ -31,6 +32,7 @@ impl Node for Expression {
             Expression::IntegerLiteral(expr) => expr.token.literal.as_ref(),
             Expression::BooleanLiteral(expr) => expr.token.literal.as_ref(),
             Expression::StringLiteral(expr) => expr.token.literal.as_ref(),
+            Expression::ArrayLiteral(expr) => expr.token.literal.as_ref(),
             Expression::Prefix(expr) => expr.token.literal.as_ref(),
             Expression::Infix(expr) => expr.token.literal.as_ref(),
             Expression::If(expr) => expr.token.literal.as_ref(),
@@ -48,6 +50,7 @@ impl Display for Expression {
             Expression::IntegerLiteral(expr) => expr.fmt(f),
             Expression::BooleanLiteral(expr) => expr.fmt(f),
             Expression::StringLiteral(expr) => expr.fmt(f),
+            Expression::ArrayLiteral(expr) => expr.fmt(f),
             Expression::Prefix(expr) => expr.fmt(f),
             Expression::Infix(expr) => expr.fmt(f),
             Expression::If(expr) => expr.fmt(f),
@@ -153,6 +156,32 @@ impl Node for StringLiteral {
 impl Display for StringLiteral {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.token_literal())?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArrayLiteral {
+    pub token: Token,
+    pub elements: Vec<Expression>,
+}
+
+impl ArrayLiteral {
+    pub fn new(token: Token, elements: Vec<Expression>) -> Self {
+        Self { token, elements }
+    }
+}
+
+impl Node for ArrayLiteral {
+    fn token_literal(&self) -> &str {
+        self.token.literal.as_ref()
+    }
+}
+
+impl Display for ArrayLiteral {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let elements = self.elements.iter().map(ToString::to_string).join(", ");
+        write!(f, "[{}]", elements)?;
         Ok(())
     }
 }

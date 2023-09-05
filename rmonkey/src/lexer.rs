@@ -64,6 +64,8 @@ impl Lexer {
             ')' => (RParen, self.ch.to_string()),
             '{' => (LBrace, self.ch.to_string()),
             '}' => (RBrace, self.ch.to_string()),
+            '[' => (LBracket, self.ch.to_string()),
+            ']' => (RBracket, self.ch.to_string()),
             '\0' => (Eof, "".to_string()),
             '"' => (String, self.read_string()),
             ch if is_letter(ch) => {
@@ -215,6 +217,7 @@ if (5 < 10) {
 10 != 9;
 \"foobar\"
 \"foo bar\"
+[1, 2];
         "
         .to_string();
 
@@ -294,6 +297,12 @@ if (5 < 10) {
             (TokenKind::Semicolon, ";"),
             (TokenKind::String, "foobar"),
             (TokenKind::String, "foo bar"),
+            (TokenKind::LBracket, "["),
+            (TokenKind::Int, "1"),
+            (TokenKind::Comma, ","),
+            (TokenKind::Int, "2"),
+            (TokenKind::RBracket, "]"),
+            (TokenKind::Semicolon, ";"),
             (TokenKind::Eof, ""),
         ];
 
