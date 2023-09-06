@@ -73,7 +73,7 @@ pub fn start(input: impl Read, output: impl Write) -> io::Result<()> {
     Ok(())
 }
 
-fn print_parser_errors(output: &mut impl Write, parser: &Parser) {
+pub fn print_parser_errors(output: &mut impl Write, parser: &Parser) {
     writeln!(output, "{}", MONKEY_FACE).unwrap();
     writeln!(output, "Woops! We ran into some monkey business here!").unwrap();
     writeln!(output, " parser errors:").unwrap();
