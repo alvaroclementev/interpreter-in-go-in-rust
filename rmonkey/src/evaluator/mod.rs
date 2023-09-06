@@ -2,12 +2,14 @@
 
 #![allow(dead_code)]
 
+mod builtins;
+
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::ast::{Expression, Program, Statement};
-use crate::object::{BuiltinFunction, Function, Object};
+use crate::object::{Function, Object};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Environment {
@@ -213,7 +215,7 @@ impl Eval for Expression {
                 }
 
                 // Check if the value is a builtin function
-                if let Some(builtin) = get_builtin(name) {
+                if let Some(builtin) = builtins::get_builtin(name) {
                     return Object::Builtin(builtin);
                 }
 
@@ -369,99 +371,6 @@ fn eval_function_application(fun: Object, args: Vec<Object>) -> Object {
             }
         }
         obj => Object::Error(format!("not a function: {}", obj.type_str())),
-    }
-}
-
-fn get_builtin(name: &str) -> Option<BuiltinFunction> {
-    // FIXME(alvaro): This is created a new reference on every call
-    match name {
-        "len" => Some(BuiltinFunction::new(
-            name.to_string(),
-            Some(1),
-            Rc::new(builtin_len),
-        )),
-        "first" => Some(BuiltinFunction::new(
-            name.to_string(),
-            Some(1),
-            Rc::new(builtin_first),
-        )),
-        "last" => Some(BuiltinFunction::new(
-            name.to_string(),
-            Some(1),
-            Rc::new(builtin_last),
-        )),
-        "rest" => Some(BuiltinFunction::new(
-            name.to_string(),
-            Some(1),
-            Rc::new(builtin_rest),
-        )),
-        "push" => Some(BuiltinFunction::new(
-            name.to_string(),
-            Some(2),
-            Rc::new(builtin_push),
-        )),
-        _ => None,
-    }
-}
-
-fn builtin_len(args: Vec<Object>) -> Object {
-    match &args[0] {
-        Object::String(value) => Object::Integer(value.len() as i64),
-        Object::Array(value) => Object::Integer(value.len() as i64),
-        obj => Object::Error(format!(
-            "argument to `len` not supported, got {}",
-            obj.type_str()
-        )),
-    }
-}
-
-fn builtin_first(args: Vec<Object>) -> Object {
-    match &args[0] {
-        Object::Array(value) => value.get(0).cloned().unwrap_or(Object::Null),
-        obj => Object::Error(format!(
-            "argument to `first` not supported, got {}",
-            obj.type_str()
-        )),
-    }
-}
-
-fn builtin_last(args: Vec<Object>) -> Object {
-    match &args[0] {
-        Object::Array(value) => {
-            if value.is_empty() {
-                Object::Null
-            } else {
-                value.last().unwrap().clone()
-            }
-        }
-        obj => Object::Error(format!(
-            "argument to `last` not supported, got {}",
-            obj.type_str()
-        )),
-    }
-}
-
-fn builtin_rest(args: Vec<Object>) -> Object {
-    match &args[0] {
-        Object::Array(value) => Object::Array(value.iter().skip(1).cloned().collect()),
-        obj => Object::Error(format!(
-            "argument to `rest` not supported, got {}",
-            obj.type_str()
-        )),
-    }
-}
-
-fn builtin_push(args: Vec<Object>) -> Object {
-    match &args[0] {
-        Object::Array(value) => {
-            let mut new_arr = value.clone();
-            new_arr.push(args[1].clone());
-            Object::Array(new_arr)
-        }
-        obj => Object::Error(format!(
-            "argument to `rest` not supported, got {}",
-            obj.type_str()
-        )),
     }
 }
 
