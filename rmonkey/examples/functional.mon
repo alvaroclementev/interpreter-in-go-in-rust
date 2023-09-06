@@ -1,0 +1,31 @@
+let reduce = fn(arr, initial, f) {
+    let iter = fn(arr, acc) {
+        if (len(arr) == 0) {
+            acc
+        } else {
+            iter(rest(arr), f(acc, first(arr)))
+        }
+    }
+    iter(arr, initial)
+};
+
+let map = fn(arr, f) {
+    reduce(arr, [], fn(acc, x) { push(acc, f(x)) })
+};
+
+let filter = fn(arr, f) {
+    reduce(arr, [], fn(acc, x) { if (f(x)) { push(acc, x) } else { acc } })
+};
+
+let sum = fn(arr) {
+    reduce(arr, 0, fn(acc, x) { acc + x })
+};
+
+let square = fn(x) { x * x };
+
+let my_arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+let result = map(my_arr, square);
+puts("After map", result);
+let result = filter(result, fn(x) { x < 50 });
+puts("After filter", result);
+puts("Sum", sum(result));
