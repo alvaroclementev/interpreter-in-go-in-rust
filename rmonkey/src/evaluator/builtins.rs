@@ -30,6 +30,11 @@ pub fn get_builtin(name: &str) -> Option<BuiltinFunction> {
             Some(2),
             Rc::new(builtin_push),
         )),
+        "puts" => Some(BuiltinFunction::new(
+            name.to_string(),
+            None,
+            Rc::new(builtin_puts),
+        )),
         _ => None,
     }
 }
@@ -95,3 +100,9 @@ fn builtin_push(args: Vec<Object>) -> Object {
     }
 }
 
+fn builtin_puts(args: Vec<Object>) -> Object {
+    for arg in args {
+        println!("{}", arg);
+    }
+    Object::Null
+}
