@@ -105,6 +105,13 @@ impl Eval for Expression {
             Expression::IntegerLiteral(lit) => Object::Integer(lit.value),
             Expression::BooleanLiteral(lit) => Object::Boolean(lit.value),
             Expression::StringLiteral(lit) => Object::String(lit.value.clone()),
+            Expression::ArrayLiteral(lit) => {
+                let mut elements = eval_expressions(&lit.elements, environment);
+                if elements.len() == 1 && elements[0].is_error() {
+                    return elements.pop().unwrap();
+                }
+                Object::Array(elements)
+            }
             Expression::Prefix(expr) => {
                 let right = expr.right.eval(environment);
                 if right.is_error() {
@@ -207,6 +214,33 @@ impl Eval for Expression {
                     return args.pop().unwrap();
                 }
                 eval_function_application(function, args)
+            }
+            Expression::Index(expr) => {
+                let left = expr.left.eval(environment.clone());
+                if left.is_error() {
+                    return left;
+                }
+
+                let right = expr.right.eval(environment);
+                if right.is_error() {
+                    return right;
+                }
+
+                match left {
+                    Object::Array(elements) => match right {
+                        Object::Integer(index) => {
+                            if index < 0 || index >= elements.len() as i64 {
+                                Object::Null
+                            } else {
+                                elements[index as usize].clone()
+                            }
+                        }
+                        obj => Object::Error(format!("invalid index type: {}", obj.type_str())),
+                    },
+                    obj => {
+                        Object::Error(format!("index operator not supported: {}", obj.type_str()))
+                    }
+                }
             }
             expr => todo!("{:?}", expr),
         }
@@ -314,6 +348,26 @@ fn get_builtin(name: &str) -> Option<BuiltinFunction> {
             Some(1),
             Rc::new(builtin_len),
         )),
+        "first" => Some(BuiltinFunction::new(
+            name.to_string(),
+            Some(1),
+            Rc::new(builtin_first),
+        )),
+        "last" => Some(BuiltinFunction::new(
+            name.to_string(),
+            Some(1),
+            Rc::new(builtin_last),
+        )),
+        "rest" => Some(BuiltinFunction::new(
+            name.to_string(),
+            Some(1),
+            Rc::new(builtin_rest),
+        )),
+        "push" => Some(BuiltinFunction::new(
+            name.to_string(),
+            Some(2),
+            Rc::new(builtin_push),
+        )),
         _ => None,
     }
 }
@@ -321,8 +375,59 @@ fn get_builtin(name: &str) -> Option<BuiltinFunction> {
 fn builtin_len(args: Vec<Object>) -> Object {
     match &args[0] {
         Object::String(value) => Object::Integer(value.len() as i64),
+        Object::Array(value) => Object::Integer(value.len() as i64),
         obj => Object::Error(format!(
             "argument to `len` not supported, got {}",
+            obj.type_str()
+        )),
+    }
+}
+
+fn builtin_first(args: Vec<Object>) -> Object {
+    match &args[0] {
+        Object::Array(value) => value.get(0).cloned().unwrap_or(Object::Null),
+        obj => Object::Error(format!(
+            "argument to `first` not supported, got {}",
+            obj.type_str()
+        )),
+    }
+}
+
+fn builtin_last(args: Vec<Object>) -> Object {
+    match &args[0] {
+        Object::Array(value) => {
+            if value.is_empty() {
+                Object::Null
+            } else {
+                value.last().unwrap().clone()
+            }
+        }
+        obj => Object::Error(format!(
+            "argument to `last` not supported, got {}",
+            obj.type_str()
+        )),
+    }
+}
+
+fn builtin_rest(args: Vec<Object>) -> Object {
+    match &args[0] {
+        Object::Array(value) => Object::Array(value.iter().skip(1).cloned().collect()),
+        obj => Object::Error(format!(
+            "argument to `rest` not supported, got {}",
+            obj.type_str()
+        )),
+    }
+}
+
+fn builtin_push(args: Vec<Object>) -> Object {
+    match &args[0] {
+        Object::Array(value) => {
+            let mut new_arr = value.clone();
+            new_arr.push(args[1].clone());
+            Object::Array(new_arr)
+        }
+        obj => Object::Error(format!(
+            "argument to `rest` not supported, got {}",
             obj.type_str()
         )),
     }
@@ -335,6 +440,7 @@ mod tests {
     use super::*;
 
     enum TestValue {
+        Null,
         Int(i64),
         Boolean(bool),
         String(String),
@@ -378,6 +484,7 @@ mod tests {
 
     fn check_object(evaluated: &Object, expected: &TestValue, input: &str) {
         match expected {
+            TestValue::Null => assert!(matches!(evaluated, Object::Null), "{}", input),
             TestValue::Int(value) => check_integer_object(evaluated, *value, input),
             TestValue::Boolean(value) => check_boolean_object(evaluated, *value, input),
             TestValue::String(value) => check_string_object(evaluated, value, input),
@@ -872,6 +979,77 @@ mod tests {
             Test {
                 input: "len(\"one\", \"two\")".to_string(),
                 expected: TestValue::Error("wrong number of arguments. got=2, want=1".to_string()),
+            },
+        ];
+
+        for test in tests {
+            let evaluated = eval_for_test(&test.input);
+            check_object(&evaluated, &test.expected, &test.input);
+        }
+    }
+
+    #[test]
+    fn test_array_literals() {
+        let input = "[1, 2 * 2, 3 + 3]".to_string();
+        let evaluated = eval_for_test(&input);
+        match evaluated {
+            Object::Array(array) => {
+                assert_eq!(array.len(), 3);
+                check_integer_object(&array[0], 1, "1");
+                check_integer_object(&array[1], 4, "2 * 2");
+                check_integer_object(&array[2], 6, "3 + 3");
+            }
+            obj => panic!("unexpected value, expected Array but got: {:?}", obj),
+        }
+    }
+
+    #[test]
+    fn test_array_index_expressions() {
+        struct Test {
+            input: String,
+            expected: TestValue,
+        }
+
+        let tests = [
+            Test {
+                input: "[1, 2, 3][0]".to_string(),
+                expected: TestValue::Int(1),
+            },
+            Test {
+                input: "[1, 2, 3][1]".to_string(),
+                expected: TestValue::Int(2),
+            },
+            Test {
+                input: "[1, 2, 3][2]".to_string(),
+                expected: TestValue::Int(3),
+            },
+            Test {
+                input: "let i = 0; [1][i];".to_string(),
+                expected: TestValue::Int(1),
+            },
+            Test {
+                input: "[1, 2, 3][1 + 1]".to_string(),
+                expected: TestValue::Int(3),
+            },
+            Test {
+                input: "let myArray = [1, 2, 3]; myArray[2]".to_string(),
+                expected: TestValue::Int(3),
+            },
+            Test {
+                input: "let myArray = [1, 2, 3]; myArray[0] + myArray[1] + myArray[2]".to_string(),
+                expected: TestValue::Int(6),
+            },
+            Test {
+                input: "let myArray = [1, 2, 3]; let i = myArray[0]; myArray[i]".to_string(),
+                expected: TestValue::Int(2),
+            },
+            Test {
+                input: "[1, 2, 3][3]".to_string(),
+                expected: TestValue::Null,
+            },
+            Test {
+                input: "[1, 2, 3][-1]".to_string(),
+                expected: TestValue::Null,
             },
         ];
 

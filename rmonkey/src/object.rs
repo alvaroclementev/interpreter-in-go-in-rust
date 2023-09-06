@@ -16,6 +16,7 @@ pub enum Object {
     Error(String),
     Function(Box<Function>),
     Builtin(BuiltinFunction),
+    Array(Vec<Object>),
 }
 
 impl Display for Object {
@@ -35,6 +36,10 @@ impl Display for Object {
                 write!(f, "fn ({}) {{\n{}\n}}", params, fun.body)
             }
             Object::Builtin(..) => write!(f, "builtin function"),
+            Object::Array(val) => {
+                let elements = val.iter().map(ToString::to_string).join(", ");
+                write!(f, "[{}]", elements)
+            }
         }
     }
 }
@@ -50,6 +55,7 @@ impl Object {
             obj @ Object::Error(..) => obj.clone(),
             Object::Function(..) => Object::Boolean(true), // Functions are truthy I guess
             Object::Builtin(..) => Object::Boolean(true),  // Functions are truthy I guess
+            Object::Array(..) => Object::Boolean(true),  // Functions are truthy I guess
         }
     }
 
@@ -70,6 +76,7 @@ impl Object {
             Object::Error(..) => "ERROR",
             Object::Function(..) => "FUNCTION",
             Object::Builtin(..) => "BUILTIN",
+            Object::Array(..) => "ARRAY",
         }
     }
 
