@@ -262,6 +262,13 @@ impl Eval for Expression {
                         }
                         obj => Object::Error(format!("invalid index type: {}", obj.type_str())),
                     },
+                    Object::Hash(hash) => {
+                        if !right.is_hashable() {
+                            Object::Error(format!("unusable as hash key: {}", right.type_str()))
+                        } else {
+                            hash.get(&right).cloned().unwrap_or(Object::Null)
+                        }
+                    }
                     obj => {
                         Object::Error(format!("index operator not supported: {}", obj.type_str()))
                     }
@@ -849,6 +856,10 @@ mod tests {
                 input: r#""Hello" - "World""#.to_string(),
                 message: "unknown operator: STRING - STRING".to_string(),
             },
+            Test {
+                input: r#"{"name": "Monkey"}[fn(x) { x }];"#.to_string(),
+                message: "unusable as hash key: FUNCTION".to_string(),
+            },
         ];
 
         for test in tests {
@@ -1114,6 +1125,50 @@ mod tests {
         for (exp_key, exp_value) in expected {
             assert!(hash.contains_key(&exp_key));
             assert_eq!(hash.get(&exp_key).unwrap(), &exp_value);
+        }
+    }
+
+    #[test]
+    fn test_hash_index_expressions() {
+        struct Test {
+            input: String,
+            expected: TestValue,
+        }
+
+        let tests = [
+            Test {
+                input: r#"{"foo": 5}["foo"]"#.to_string(),
+                expected: TestValue::Int(5),
+            },
+            Test {
+                input: r#"{"foo": 5}["bar"]"#.to_string(),
+                expected: TestValue::Null,
+            },
+            Test {
+                input: r#"let key = "foo"; {"foo": 5}[key]"#.to_string(),
+                expected: TestValue::Int(5),
+            },
+            Test {
+                input: r#"{}["foo"]"#.to_string(),
+                expected: TestValue::Null,
+            },
+            Test {
+                input: r#"{5: 5}[5]"#.to_string(),
+                expected: TestValue::Int(5),
+            },
+            Test {
+                input: r#"{true: 5}[true]"#.to_string(),
+                expected: TestValue::Int(5),
+            },
+            Test {
+                input: r#"{false: 5}[false]"#.to_string(),
+                expected: TestValue::Int(5),
+            },
+        ];
+
+        for test in tests {
+            let evaluated = eval_for_test(&test.input);
+            check_object(&evaluated, &test.expected, &test.input);
         }
     }
 }
