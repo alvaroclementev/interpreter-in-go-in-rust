@@ -112,6 +112,31 @@ impl Eval for Expression {
                 }
                 Object::Array(elements)
             }
+            Expression::HashLiteral(lit) => {
+                let mut hash = HashMap::new();
+
+                // Fill out the hashmap
+                for (key_expr, val_expr) in lit.pairs.iter() {
+                    let key = key_expr.eval(environment.clone());
+                    if key.is_error() {
+                        return key;
+                    }
+
+                    // Check if the key is hashable
+                    if !key.is_hashable() {
+                        return Object::Error(format!("unusable as hash key: {}", key.type_str()));
+                    }
+
+                    let value = val_expr.eval(environment.clone());
+                    if value.is_error() {
+                        return value;
+                    }
+
+                    hash.insert(key, value);
+                }
+
+                Object::Hash(hash)
+            }
             Expression::Prefix(expr) => {
                 let right = expr.right.eval(environment);
                 if right.is_error() {
@@ -1056,6 +1081,39 @@ mod tests {
         for test in tests {
             let evaluated = eval_for_test(&test.input);
             check_object(&evaluated, &test.expected, &test.input);
+        }
+    }
+
+    #[test]
+    fn test_hash_literals() {
+        let input = r#"let two = "two";
+        {
+            "one": 10 - 9,
+            two: 1 + 1,
+            "thr" + "ee": 6 / 2,
+            4: 4,
+            true: 5,
+            false: 6
+        }
+        "#
+        .to_string();
+        let evaluated = eval_for_test(&input);
+
+        let expected = vec![
+            (Object::String("one".to_string()), Object::Integer(1)),
+            (Object::String("two".to_string()), Object::Integer(2)),
+            (Object::String("three".to_string()), Object::Integer(3)),
+            (Object::Integer(4), Object::Integer(4)),
+            (Object::Boolean(true), Object::Integer(5)),
+            (Object::Boolean(false), Object::Integer(6)),
+        ];
+
+        let Object::Hash(hash) = evaluated else {
+            unreachable!()
+        };
+        for (exp_key, exp_value) in expected {
+            assert!(hash.contains_key(&exp_key));
+            assert_eq!(hash.get(&exp_key).unwrap(), &exp_value);
         }
     }
 }

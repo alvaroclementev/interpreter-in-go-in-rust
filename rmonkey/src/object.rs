@@ -2,7 +2,7 @@
 #![allow(dead_code)]
 
 use itertools::Itertools;
-use std::{cell::RefCell, fmt::Display, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
 
 use crate::{ast, evaluator::Environment};
 
@@ -17,6 +17,9 @@ pub enum Object {
     Function(Box<Function>),
     Builtin(BuiltinFunction),
     Array(Vec<Object>),
+    // NOTE(alvaro): We DO NOT support using `Object` that are not "hashable"
+    // as keys for a Hash. See `is_hashable`
+    Hash(HashMap<Object, Object>),
 }
 
 impl Display for Object {
@@ -40,6 +43,32 @@ impl Display for Object {
                 let elements = val.iter().map(ToString::to_string).join(", ");
                 write!(f, "[{}]", elements)
             }
+            Object::Hash(val) => {
+                let elements = val.iter().map(|(k, v)| format!("{}: {}", k, v)).join(", ");
+                write!(f, "{{{}}}", elements)?;
+                Ok(())
+            }
+        }
+    }
+}
+
+// NOTE(alvaro): We implement hash so that they can be inserted in a HashMap
+impl std::hash::Hash for Object {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            Object::Integer(val) => {
+                core::mem::discriminant(self).hash(state);
+                val.hash(state);
+            }
+            Object::Boolean(val) => {
+                core::mem::discriminant(self).hash(state);
+                val.hash(state);
+            }
+            Object::String(val) => {
+                core::mem::discriminant(self).hash(state);
+                val.hash(state);
+            }
+            obj => panic!("hash not supported for {:?}", obj),
         }
     }
 }
@@ -54,8 +83,9 @@ impl Object {
             Object::Return(obj) => obj.as_boolean(),
             obj @ Object::Error(..) => obj.clone(),
             Object::Function(..) => Object::Boolean(true), // Functions are truthy I guess
-            Object::Builtin(..) => Object::Boolean(true),  // Functions are truthy I guess
-            Object::Array(..) => Object::Boolean(true),  // Functions are truthy I guess
+            Object::Builtin(..) => Object::Boolean(true),
+            Object::Array(..) => Object::Boolean(true),
+            Object::Hash(..) => Object::Boolean(true),
         }
     }
 
@@ -64,6 +94,13 @@ impl Object {
             unreachable!()
         };
         val
+    }
+
+    pub fn is_hashable(&self) -> bool {
+        matches!(
+            self,
+            Object::Boolean(..) | Object::Integer(..) | Object::String(..)
+        )
     }
 
     pub fn type_str(&self) -> &str {
@@ -77,6 +114,7 @@ impl Object {
             Object::Function(..) => "FUNCTION",
             Object::Builtin(..) => "BUILTIN",
             Object::Array(..) => "ARRAY",
+            Object::Hash(..) => "HASH",
         }
     }
 
