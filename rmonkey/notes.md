@@ -2,12 +2,6 @@
 
 ## Next Steps
 
-- Hash builtins
-    - insert
-    - keys
-    - values
-    - pairs
-    - contains
 - Builtins
     - range
 - Module system (import)
