@@ -1,5 +1,20 @@
 # Notes
 
+## Next Steps
+
+- Hash builtins
+    - insert
+    - keys
+    - values
+    - pairs
+    - contains
+- Builtins
+    - range
+- Module system (import)
+
+
+## Improvements
+
 Things that should probably be changed
 
 - Structure of Expression and Statement
