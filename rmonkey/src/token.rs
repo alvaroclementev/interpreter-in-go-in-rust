@@ -21,6 +21,7 @@ pub enum TokenKind {
     NotEq,
     // Delimiters
     Comma,
+    Colon,
     Semicolon,
     LParen,
     RParen,

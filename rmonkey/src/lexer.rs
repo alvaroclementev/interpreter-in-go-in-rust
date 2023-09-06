@@ -58,6 +58,7 @@ impl Lexer {
             '*' => (Asterisk, self.ch.to_string()),
             '<' => (Lt, self.ch.to_string()),
             '>' => (Gt, self.ch.to_string()),
+            ':' => (Colon, self.ch.to_string()),
             ';' => (Semicolon, self.ch.to_string()),
             ',' => (Comma, self.ch.to_string()),
             '(' => (LParen, self.ch.to_string()),
@@ -196,7 +197,7 @@ mod tests {
 
     #[test]
     fn test_next_token() {
-        let input = "let five = 5;
+        let input = r#"let five = 5;
 let ten = 10;
 
 let add = fn(x, y) {
@@ -215,10 +216,11 @@ if (5 < 10) {
 
 10 == 10;
 10 != 9;
-\"foobar\"
-\"foo bar\"
+"foobar"
+"foo bar"
 [1, 2];
-        "
+{"foo": "bar"}
+        "#
         .to_string();
 
         let tests = vec![
@@ -303,6 +305,11 @@ if (5 < 10) {
             (TokenKind::Int, "2"),
             (TokenKind::RBracket, "]"),
             (TokenKind::Semicolon, ";"),
+            (TokenKind::LBrace, "{"),
+            (TokenKind::String, "foo"),
+            (TokenKind::Colon, ":"),
+            (TokenKind::String, "bar"),
+            (TokenKind::RBrace, "}"),
             (TokenKind::Eof, ""),
         ];
 

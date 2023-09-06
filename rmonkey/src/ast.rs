@@ -17,6 +17,7 @@ pub enum Expression {
     BooleanLiteral(BooleanLiteral),
     StringLiteral(StringLiteral),
     ArrayLiteral(ArrayLiteral),
+    HashLiteral(HashLiteral),
     Prefix(PrefixExpression),
     Infix(InfixExpression),
     If(IfExpression),
@@ -34,6 +35,7 @@ impl Node for Expression {
             Expression::BooleanLiteral(expr) => expr.token.literal.as_ref(),
             Expression::StringLiteral(expr) => expr.token.literal.as_ref(),
             Expression::ArrayLiteral(expr) => expr.token.literal.as_ref(),
+            Expression::HashLiteral(expr) => expr.token.literal.as_ref(),
             Expression::Prefix(expr) => expr.token.literal.as_ref(),
             Expression::Infix(expr) => expr.token.literal.as_ref(),
             Expression::If(expr) => expr.token.literal.as_ref(),
@@ -53,6 +55,7 @@ impl Display for Expression {
             Expression::BooleanLiteral(expr) => expr.fmt(f),
             Expression::StringLiteral(expr) => expr.fmt(f),
             Expression::ArrayLiteral(expr) => expr.fmt(f),
+            Expression::HashLiteral(expr) => expr.fmt(f),
             Expression::Prefix(expr) => expr.fmt(f),
             Expression::Infix(expr) => expr.fmt(f),
             Expression::If(expr) => expr.fmt(f),
@@ -185,6 +188,39 @@ impl Display for ArrayLiteral {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let elements = self.elements.iter().map(ToString::to_string).join(", ");
         write!(f, "[{}]", elements)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HashLiteral {
+    pub token: Token,
+    // NOTE(alvaro): Using some Map here is unnecessary, and there are problems
+    // with implementing `Hash` for any kind of Expression (which is not
+    // necessary)
+    pub pairs: Vec<(Expression, Expression)>,
+}
+
+impl HashLiteral {
+    pub fn new(token: Token, pairs: Vec<(Expression, Expression)>) -> Self {
+        Self { token, pairs }
+    }
+}
+
+impl Node for HashLiteral {
+    fn token_literal(&self) -> &str {
+        self.token.literal.as_ref()
+    }
+}
+
+impl Display for HashLiteral {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let elements = self
+            .pairs
+            .iter()
+            .map(|p| format!("{}: {}", p.0, p.1))
+            .join(", ");
+        write!(f, "{{{}}}", elements)?;
         Ok(())
     }
 }

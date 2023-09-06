@@ -173,6 +173,7 @@ impl Parser {
             TokenKind::False => self.parse_boolean_literal(),
             TokenKind::String => self.parse_string_literal(),
             TokenKind::LBracket => self.parse_array_literal(),
+            TokenKind::LBrace => self.parse_hash_literal(),
             TokenKind::LParen => self.parse_grouped_expression(),
             TokenKind::If => self.parse_if_expression(),
             TokenKind::Function => self.parse_function_literal(),
@@ -250,6 +251,38 @@ impl Parser {
         let elements = self.parse_expression_list(TokenKind::RBracket)?;
         let literal = ast::ArrayLiteral::new(token, elements);
         Ok(ast::Expression::ArrayLiteral(literal))
+    }
+
+    fn parse_hash_literal(&mut self) -> Result<ast::Expression, String> {
+        let token = self.current.clone();
+        let mut pairs = Vec::new();
+
+        // Parse the elements
+        while !self.peek_is(TokenKind::RBrace) {
+            self.next_token();
+            let key = self
+                .parse_expression(Precedence::Lowest)
+                .ok_or("failed to parse key expression in hash literal".to_string())?;
+            if !self.expect_peek(TokenKind::Colon) {
+                return Err("expected a ':' when parsing hash literal pair".to_string());
+            }
+            self.next_token();
+            let value = self
+                .parse_expression(Precedence::Lowest)
+                .ok_or("failed to parse value expression in hash literal".to_string())?;
+
+            pairs.push((key, value));
+
+            if !self.peek_is(TokenKind::RBrace) && !self.expect_peek(TokenKind::Comma) {
+                return Err("expected '}' or ',' after parsing hash literal pair".to_string());
+            }
+        }
+
+        if !self.expect_peek(TokenKind::RBrace) {
+            return Err("expected '}' after parsing hash literal".to_string());
+        }
+        let literal = ast::HashLiteral::new(token, pairs);
+        Ok(ast::Expression::HashLiteral(literal))
     }
 
     fn parse_prefix_expression(&mut self) -> Result<ast::Expression, String> {
@@ -1382,5 +1415,96 @@ mod tests {
 
         check_identifier(&index.left, "myArray");
         check_infix_expression(&index.right, TestValue::Int(1), "+", TestValue::Int(1));
+    }
+
+    #[test]
+    fn test_parsing_hash_literals_string_keys() {
+        let input = r#"{"one": 1, "two": 2, "three": 3}"#.to_string();
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+        check_parser_errors(&mut parser);
+
+        assert_eq!(program.statements.len(), 1);
+
+        let Statement::Expression(Expression::HashLiteral(hash)) = &program.statements[0] else {
+            unreachable!()
+        };
+
+        assert_eq!(hash.pairs.len(), 3);
+        let expected = vec![("one", 1), ("two", 2), ("three", 3)];
+
+        for ((key, value), (exp_key, exp_value)) in hash.pairs.iter().zip(expected.into_iter()) {
+            match key {
+                Expression::StringLiteral(lit) => {
+                    assert_eq!(lit.value, exp_key);
+                    check_integer_literal(value, exp_value);
+                }
+                expr => panic!(
+                    "invalid expression: expected StringLiteral but got {:?}",
+                    expr
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn test_parsing_empty_hash_literal() {
+        let input = "{}".to_string();
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+        check_parser_errors(&mut parser);
+
+        assert_eq!(program.statements.len(), 1);
+
+        let Statement::Expression(Expression::HashLiteral(hash)) = &program.statements[0] else {
+            unreachable!()
+        };
+
+        assert_eq!(hash.pairs.len(), 0);
+    }
+
+    #[test]
+    fn test_parsing_hash_literals_with_expressions() {
+        let input = r#"{"one": 0 + 1, "two": 10 - 8, "three": 15 / 5}"#.to_string();
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+        check_parser_errors(&mut parser);
+
+        assert_eq!(program.statements.len(), 1);
+
+        let Statement::Expression(Expression::HashLiteral(hash)) = &program.statements[0] else {
+            unreachable!()
+        };
+
+        assert_eq!(hash.pairs.len(), 3);
+
+        struct Test<'a> {
+            key: &'a str,
+            value: i64,
+            operation: (i64, &'a str, i64),
+            input: &'a str,
+        }
+
+        let expected = vec![Test {
+            key: "one",
+            value: 1,
+            operation: (0, "+", 1),
+            input: "0 + 1",
+        }];
+
+        for ((key, value), test) in hash.pairs.iter().zip(expected.into_iter()) {
+            let Expression::StringLiteral(lit) = key else {
+                panic!(
+                    "invalid expression: expected StringLiteral but got {:?}",
+                    key
+                );
+            };
+            assert_eq!(lit.value, test.key);
+            let (left, op, right) = test.operation;
+            check_infix_expression(value, TestValue::Int(left), op, TestValue::Int(right));
+        }
     }
 }
