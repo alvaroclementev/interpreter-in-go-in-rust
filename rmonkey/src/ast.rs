@@ -429,6 +429,7 @@ pub enum Statement {
     Return(Return),
     Expression(Expression),
     Block(Block),
+    While(While),
 }
 
 impl Node for Statement {
@@ -438,6 +439,7 @@ impl Node for Statement {
             Statement::Return(stmt) => stmt.token_literal(),
             Statement::Expression(stmt) => stmt.token_literal(),
             Statement::Block(stmt) => stmt.token_literal(),
+            Statement::While(stmt) => stmt.token_literal(),
         }
     }
 }
@@ -449,6 +451,7 @@ impl Display for Statement {
             Statement::Return(stmt) => stmt.fmt(f),
             Statement::Expression(stmt) => stmt.fmt(f),
             Statement::Block(stmt) => stmt.fmt(f),
+            Statement::While(stmt) => stmt.fmt(f),
         }
     }
 }
@@ -535,6 +538,35 @@ impl Display for Block {
             .iter()
             .try_for_each(|s| write!(f, "{}", s))?;
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct While {
+    pub token: Token,
+    pub condition: Expression,
+    pub body: Block,
+}
+
+impl While {
+    pub fn new(token: Token, condition: Expression, body: Block) -> Self {
+        Self {
+            token,
+            condition,
+            body,
+        }
+    }
+}
+
+impl Node for While {
+    fn token_literal(&self) -> &str {
+        self.token.literal.as_ref()
+    }
+}
+
+impl Display for While {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}() {{\n{}\n}}", self.token_literal(), self.body)
     }
 }
 

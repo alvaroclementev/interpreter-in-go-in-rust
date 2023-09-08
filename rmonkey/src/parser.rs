@@ -1507,4 +1507,31 @@ mod tests {
             check_infix_expression(value, TestValue::Int(left), op, TestValue::Int(right));
         }
     }
+
+    #[test]
+    fn test_parsing_while_statement() {
+        let input = "while(true) { let x = 1 + 2; }".to_string();
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+        check_parser_errors(&mut parser);
+
+        assert_eq!(program.statements.len(), 1);
+
+        let Statement::While(w) = &program.statements[0] else {
+            unreachable!()
+        };
+
+        // Check the condition
+        check_bool_literal(&w.condition, true);
+
+        //  Check the let statement
+        assert_eq!(w.body.statements.len(), 1);
+        let Statement::Let(stmt) = &w.body.statements[0] else {
+            unreachable!()
+        };
+        assert_eq!(stmt.name.value, "x");
+
+        check_infix_expression(&stmt.value, TestValue::Int(1), "+", TestValue::Int(2));
+    }
 }

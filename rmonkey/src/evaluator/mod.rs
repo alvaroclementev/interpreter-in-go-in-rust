@@ -1080,4 +1080,20 @@ mod tests {
             check_object(&evaluated, &test.expected, &test.input);
         }
     }
+
+    #[test]
+    fn test_while_statement() {
+        struct Test {
+            input: String,
+            expected: i64,
+        }
+
+        let input = "let i = 0; while(i < 10) { let i = i + 1;}".to_string();
+
+        for test in tests {
+            let evaluated = eval_for_test(&test.input);
+
+            check_integer_object(&evaluated, test.expected, &test.input);
+        }
+    }
 }

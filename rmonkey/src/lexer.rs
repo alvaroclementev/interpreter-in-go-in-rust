@@ -162,6 +162,7 @@ fn lookup_identifier(ident: &str) -> TokenKind {
         "if" => TokenKind::If,
         "else" => TokenKind::Else,
         "return" => TokenKind::Return,
+        "while" => TokenKind::While,
         _ => TokenKind::Identifier,
     }
 }
@@ -220,6 +221,10 @@ if (5 < 10) {
 "foo bar"
 [1, 2];
 {"foo": "bar"}
+
+while(true) {
+    let x = x + 1;
+}
         "#
         .to_string();
 
@@ -309,6 +314,19 @@ if (5 < 10) {
             (TokenKind::String, "foo"),
             (TokenKind::Colon, ":"),
             (TokenKind::String, "bar"),
+            (TokenKind::RBrace, "}"),
+            (TokenKind::While, "while"),
+            (TokenKind::LParen, "("),
+            (TokenKind::True, "true"),
+            (TokenKind::RParen, ")"),
+            (TokenKind::LBrace, "{"),
+            (TokenKind::Let, "let"),
+            (TokenKind::Identifier, "x"),
+            (TokenKind::Assign, "="),
+            (TokenKind::Identifier, "x"),
+            (TokenKind::Plus, "+"),
+            (TokenKind::Int, "1"),
+            (TokenKind::Semicolon, ";"),
             (TokenKind::RBrace, "}"),
             (TokenKind::Eof, ""),
         ];

@@ -37,6 +37,7 @@ pub enum TokenKind {
     If,
     Else,
     Return,
+    While,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
